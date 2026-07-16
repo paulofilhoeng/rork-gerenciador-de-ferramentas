@@ -1,5 +1,5 @@
 import type { DB, Tool, ToolMovement } from "./types";
-import { newId } from "./types";
+import { newId, computeNextAuditDate, type AuditFrequency } from "./types";
 
 function daysAgo(days: number): string {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
@@ -15,7 +15,7 @@ function monthsAgo(months: number): string {
   return d.toISOString();
 }
 
-/** Builds the initial demo dataset, mirroring SeedData.swift. */
+/** Builds the initial demo dataset. Used for seeding when the database is empty. */
 export function buildSeedData(): DB {
   const now = new Date().toISOString();
 
@@ -100,6 +100,9 @@ export function buildSeedData(): DB {
     currentSiteId: null as string | null,
     currentEmployeeId: null as string | null,
     createdAt: now,
+    auditFrequency: "monthly" as AuditFrequency,
+    lastAuditDate: null as string | null,
+    nextAuditDate: computeNextAuditDate("monthly") as string | null,
   };
 
   const tools: Tool[] = [
@@ -124,34 +127,21 @@ export function buildSeedData(): DB {
     newValue: "",
     timestamp: daysAgo(30),
     attachmentIds: [],
+    userId: null,
+    userName: "",
   }));
-
-  const guindaste = tools[5];
-  const plataforma = tools[6];
-  const escavadeira = tools[7];
-  const gerador = tools[8];
-  const compactador = tools[4];
-
-  const extraMovements: ToolMovement[] = [
-    { id: newId(), toolId: guindaste.id, type: "siteAssigned", description: "Atribuída à obra", oldValue: "", newValue: torreNorte.name, timestamp: daysAgo(12), attachmentIds: [] },
-    { id: newId(), toolId: guindaste.id, type: "employeeAssigned", description: "Responsável atribuído", oldValue: "", newValue: joao.name, timestamp: daysAgo(12), attachmentIds: [] },
-    { id: newId(), toolId: guindaste.id, type: "rentalStarted", description: "Aluguel iniciado", oldValue: "", newValue: "", timestamp: daysAgo(12), attachmentIds: [] },
-    { id: newId(), toolId: plataforma.id, type: "siteAssigned", description: "Atribuída à obra", oldValue: "", newValue: residencialVerde.name, timestamp: daysAgo(20), attachmentIds: [] },
-    { id: newId(), toolId: plataforma.id, type: "employeeAssigned", description: "Responsável atribuído", oldValue: "", newValue: maria.name, timestamp: daysAgo(20), attachmentIds: [] },
-    { id: newId(), toolId: compactador.id, type: "statusChanged", description: "Status alterado", oldValue: "Disponível", newValue: "Manutenção", timestamp: daysAgo(5), attachmentIds: [] },
-    { id: newId(), toolId: escavadeira.id, type: "siteAssigned", description: "Atribuída à obra", oldValue: "", newValue: shoppingSul.name, timestamp: daysAgo(15), attachmentIds: [] },
-    { id: newId(), toolId: escavadeira.id, type: "employeeAssigned", description: "Responsável atribuído", oldValue: "", newValue: lucas.name, timestamp: daysAgo(15), attachmentIds: [] },
-    { id: newId(), toolId: gerador.id, type: "siteAssigned", description: "Atribuída à obra", oldValue: "", newValue: torreNorte.name, timestamp: daysAgo(5), attachmentIds: [] },
-    { id: newId(), toolId: gerador.id, type: "employeeAssigned", description: "Responsável atribuído", oldValue: "", newValue: jose.name, timestamp: daysAgo(5), attachmentIds: [] },
-  ];
 
   return {
     tools,
     companies: [techRent, obraPrime, buildMax],
     sites: [torreNorte, residencialVerde, shoppingSul],
     employees: [joao, pedro, maria, jose, lucas],
-    movements: [...movements, ...extraMovements],
+    movements,
     attachments: [],
+    audits: [],
+    maintenance: [],
+    activityLogs: [],
+    users: [],
     settings: { notificationsEnabled: false, alertDaysBefore: 3 },
   };
 }

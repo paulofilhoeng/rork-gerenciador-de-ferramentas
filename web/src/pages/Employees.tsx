@@ -52,12 +52,12 @@ function EmployeeEditDialog({ employee, open, onClose }: { employee: Employee | 
     setShowError(false);
   }, [open, employee]);
 
-  const save = () => {
+  const save = async () => {
     if (!name.trim()) {
       setShowError(true);
       return;
     }
-    saveEmployee({
+    await saveEmployee({
       id: employee?.id ?? newId(),
       name: name.trim(),
       role,
@@ -95,7 +95,7 @@ function EmployeeEditDialog({ employee, open, onClose }: { employee: Employee | 
             <button type="button" onClick={onClose} className="flex-1 rounded-xl border-[0.5px] border-app-separator bg-app-elevated py-3 text-sm font-semibold text-app-muted hover:text-white">
               Cancelar
             </button>
-            <button type="button" onClick={save} className="flex-1 rounded-xl bg-app-accent py-3 text-sm font-bold text-app-bg hover:opacity-90">
+            <button type="button" onClick={() => void save()} className="flex-1 rounded-xl bg-app-accent py-3 text-sm font-bold text-app-bg hover:opacity-90">
               Salvar
             </button>
           </div>
@@ -299,7 +299,7 @@ export function EmployeeDetail() {
             <AlertDialogAction
               className="bg-status-red text-white hover:bg-status-red/80"
               onClick={() => {
-                deleteEmployee(employee.id);
+                void deleteEmployee(employee.id);
                 toast.success("Funcionário excluído");
                 navigate("/funcionarios");
               }}

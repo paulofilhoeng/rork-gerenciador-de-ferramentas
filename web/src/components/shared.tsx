@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   ArrowLeftRight,
   CheckCircle2,
+  ClipboardCheck,
   Hammer,
   Key,
   KeyRound,
@@ -13,6 +14,7 @@ import {
   UserMinus,
   UserPlus,
   Wrench,
+  Wrench as WrenchIcon,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -79,6 +81,10 @@ export const MOVEMENT_ICON: Record<MovementType, LucideIcon> = {
   rentalEnded: Key,
   ownershipChanged: ArrowLeftRight,
   notesChanged: StickyNote,
+  auditConfirmed: ClipboardCheck,
+  auditDamaged: AlertTriangle,
+  maintenanceStarted: WrenchIcon,
+  maintenanceReturned: CheckCircle2,
 };
 
 // MARK: - Building blocks

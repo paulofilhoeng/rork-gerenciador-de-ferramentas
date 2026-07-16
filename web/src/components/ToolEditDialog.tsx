@@ -3,8 +3,8 @@ import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, inputClass } from "@/components/shared";
 import { useData } from "@/lib/store";
-import type { MovementType, Tool, ToolMovement, ToolOwnership, ToolStatus } from "@/lib/types";
-import { OWNERSHIP_LABEL, TOOL_STATUS_LABEL, newId } from "@/lib/types";
+import type { AuditFrequency, MovementType, Tool, ToolMovement, ToolOwnership, ToolStatus } from "@/lib/types";
+import { AUDIT_FREQUENCY_LABEL, OWNERSHIP_LABEL, TOOL_STATUS_LABEL, computeNextAuditDate, newId } from "@/lib/types";
 import { formatShortDate, fromDateInputValue, toDateInputValue } from "@/lib/format";
 
 interface Props {
@@ -13,7 +13,6 @@ interface Props {
   onClose: () => void;
 }
 
-/** Create/edit form for tools; records movement history diffs like the iOS app. */
 export function ToolEditDialog({ tool, open, onClose }: Props) {
   const { db, saveTool, addMovements } = useData();
   const isNew = tool === null;
@@ -32,6 +31,7 @@ export function ToolEditDialog({ tool, open, onClose }: Props) {
   const [companyId, setCompanyId] = useState("");
   const [siteId, setSiteId] = useState("");
   const [employeeId, setEmployeeId] = useState("");
+  const [auditFrequency, setAuditFrequency] = useState<AuditFrequency>("monthly");
   const [showError, setShowError] = useState(false);
 
   useEffect(() => {
@@ -50,10 +50,11 @@ export function ToolEditDialog({ tool, open, onClose }: Props) {
     setCompanyId(tool?.rentalCompanyId ?? "");
     setSiteId(tool?.currentSiteId ?? "");
     setEmployeeId(tool?.currentEmployeeId ?? "");
+    setAuditFrequency(tool?.auditFrequency ?? "monthly");
     setShowError(false);
   }, [open, tool]);
 
-  const save = () => {
+  const save = async () => {
     if (!name.trim()) {
       setShowError(true);
       return;
@@ -76,8 +77,12 @@ export function ToolEditDialog({ tool, open, onClose }: Props) {
       rentalCompanyId: companyId || null,
       currentSiteId: siteId || null,
       currentEmployeeId: employeeId || null,
+      auditFrequency,
+      lastAuditDate: tool?.lastAuditDate ?? null,
+      nextAuditDate: tool?.nextAuditDate ?? computeNextAuditDate(auditFrequency),
     };
 
+    // Record movement diffs for existing tools
     const movements: ToolMovement[] = [];
     const record = (type: MovementType, description: string, oldValue = "", newValue = "") => {
       movements.push({
@@ -89,15 +94,14 @@ export function ToolEditDialog({ tool, open, onClose }: Props) {
         newValue,
         timestamp: new Date().toISOString(),
         attachmentIds: [],
+        userId: null,
+        userName: "",
       });
     };
 
-    if (isNew) {
-      record("created", "Ferramenta criada");
-    } else if (tool) {
+    if (!isNew && tool) {
       const siteName = (id: string | null) => (id ? db.sites.find((s) => s.id === id)?.name ?? null : null);
       const empName = (id: string | null) => (id ? db.employees.find((e) => e.id === id)?.name ?? null : null);
-      const compName = (id: string | null) => (id ? db.companies.find((c) => c.id === id)?.name ?? null : null);
 
       const oldSite = siteName(tool.currentSiteId);
       const newSite = siteName(target.currentSiteId);
@@ -118,33 +122,16 @@ export function ToolEditDialog({ tool, open, onClose }: Props) {
       if (target.baseStatus !== tool.baseStatus) {
         record("statusChanged", "Status alterado", TOOL_STATUS_LABEL[tool.baseStatus], TOOL_STATUS_LABEL[target.baseStatus]);
       }
-
       if (target.ownership !== tool.ownership) {
         record("ownershipChanged", "Tipo de propriedade alterado", OWNERSHIP_LABEL[tool.ownership], OWNERSHIP_LABEL[target.ownership]);
       }
-
       if (target.notes !== tool.notes) {
         record("notesChanged", "Observações atualizadas");
       }
-
-      if ((target.rentalEndDate ?? null) !== (tool.rentalEndDate ?? null)) {
-        record(
-          "rentalStarted",
-          "Data de devolução alterada",
-          tool.rentalEndDate ? formatShortDate(tool.rentalEndDate) : "—",
-          target.rentalEndDate ? formatShortDate(target.rentalEndDate) : "—",
-        );
-      }
-
-      const oldComp = compName(tool.rentalCompanyId);
-      const newComp = compName(target.rentalCompanyId);
-      if (newComp !== oldComp) {
-        record("rentalStarted", "Locadora alterada", oldComp ?? "—", newComp ?? "—");
-      }
     }
 
-    saveTool(target);
-    addMovements(movements);
+    await saveTool(target);
+    if (movements.length > 0) await addMovements(movements);
     toast.success(isNew ? "Ferramenta criada" : "Ferramenta atualizada");
     onClose();
   };
@@ -169,7 +156,7 @@ export function ToolEditDialog({ tool, open, onClose }: Props) {
               <input className={inputClass} value={model} onChange={(e) => setModel(e.target.value)} />
             </Field>
           </div>
-          <Field label="N° de série">
+          <Field label="Código / Patrimônio / N° de série">
             <input className={inputClass} value={serialNumber} onChange={(e) => setSerialNumber(e.target.value)} />
           </Field>
 
@@ -198,22 +185,12 @@ export function ToolEditDialog({ tool, open, onClose }: Props) {
                 <select className={inputClass} value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
                   <option value="">Nenhuma</option>
                   {db.companies.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
+                    <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </select>
               </Field>
               <Field label="Custo diário (R$)">
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  className={inputClass}
-                  value={dailyRentalCost}
-                  onChange={(e) => setDailyRentalCost(e.target.value)}
-                  placeholder="0,00"
-                />
+                <input type="number" min="0" step="0.01" className={inputClass} value={dailyRentalCost} onChange={(e) => setDailyRentalCost(e.target.value)} placeholder="0,00" />
               </Field>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Data de início">
@@ -235,13 +212,11 @@ export function ToolEditDialog({ tool, open, onClose }: Props) {
 
           <p className="text-xs font-bold uppercase tracking-wider text-app-accent">Alocação</p>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Obra">
+            <Field label="Obra / Estoque">
               <select className={inputClass} value={siteId} onChange={(e) => setSiteId(e.target.value)}>
                 <option value="">Nenhuma</option>
                 {db.sites.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
+                  <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
               </select>
             </Field>
@@ -249,13 +224,23 @@ export function ToolEditDialog({ tool, open, onClose }: Props) {
               <select className={inputClass} value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
                 <option value="">Ninguém</option>
                 {db.employees.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.name}
-                  </option>
+                  <option key={e.id} value={e.id}>{e.name}</option>
                 ))}
               </select>
             </Field>
           </div>
+
+          <p className="text-xs font-bold uppercase tracking-wider text-app-accent">Auditoria</p>
+          <Field label="Frequência de Auditoria">
+            <select className={inputClass} value={auditFrequency} onChange={(e) => setAuditFrequency(e.target.value as AuditFrequency)}>
+              {(Object.keys(AUDIT_FREQUENCY_LABEL) as AuditFrequency[]).map((freq) => (
+                <option key={freq} value={freq}>{AUDIT_FREQUENCY_LABEL[freq]}</option>
+              ))}
+            </select>
+          </Field>
+          {tool?.nextAuditDate && (
+            <p className="text-xs text-app-muted">Próxima auditoria: {formatShortDate(tool.nextAuditDate)}</p>
+          )}
 
           <Field label="Observações">
             <textarea className={inputClass} rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notas" />
@@ -264,18 +249,10 @@ export function ToolEditDialog({ tool, open, onClose }: Props) {
           {showError && <p className="text-[13px] font-medium text-status-red">O nome da ferramenta é obrigatório.</p>}
 
           <div className="flex gap-3 pt-1">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 rounded-xl border-[0.5px] border-app-separator bg-app-elevated py-3 text-sm font-semibold text-app-muted transition-colors hover:text-white"
-            >
+            <button type="button" onClick={onClose} className="flex-1 rounded-xl border-[0.5px] border-app-separator bg-app-elevated py-3 text-sm font-semibold text-app-muted hover:text-white">
               Cancelar
             </button>
-            <button
-              type="button"
-              onClick={save}
-              className="flex-1 rounded-xl bg-app-accent py-3 text-sm font-bold text-app-bg transition-opacity hover:opacity-90"
-            >
+            <button type="button" onClick={() => void save()} className="flex-1 rounded-xl bg-app-accent py-3 text-sm font-bold text-app-bg hover:opacity-90">
               Salvar
             </button>
           </div>

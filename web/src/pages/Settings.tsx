@@ -5,19 +5,21 @@ import { Switch } from "@/components/ui/switch";
 import { PageContainer } from "@/components/Layout";
 import { Card, IconTile, SectionHeader, Separator, inputClass } from "@/components/shared";
 import { useData } from "@/lib/store";
+import { useAuth } from "@/lib/auth";
 import { daysRemaining, effectiveStatus } from "@/lib/types";
 import { formatShortDate } from "@/lib/format";
 import { generateMovementsReport, generateRentalReport, generateToolsReport } from "@/lib/reports";
 
 export default function Settings() {
   const { db, updateSettings } = useData();
+  const { profile, isAdmin } = useAuth();
   const [exporting, setExporting] = useState(false);
 
   const scheduledCount = db.tools.filter((t) => t.ownership === "rented" && t.rentalEndDate).length;
 
   const toggleNotifications = async (enabled: boolean) => {
     if (!enabled) {
-      updateSettings({ notificationsEnabled: false });
+      await updateSettings({ notificationsEnabled: false });
       return;
     }
     if (!("Notification" in window)) {
@@ -26,10 +28,10 @@ export default function Settings() {
     }
     const permission = await Notification.requestPermission();
     if (permission === "granted") {
-      updateSettings({ notificationsEnabled: true });
+      await updateSettings({ notificationsEnabled: true });
       toast.success("Alertas de vencimento ativados");
     } else {
-      toast.error("Permissão de notificações negada. Habilite nas configurações do navegador.");
+      toast.error("Permissão de notificações negada.");
     }
   };
 
@@ -87,7 +89,7 @@ export default function Settings() {
     },
     {
       title: "Histórico de Movimentações",
-      description: `Todas as movimentações registradas (${db.movements.length})`,
+      description: `Todas as movimentações (${db.movements.length})`,
       icon: Clock,
       action: () => {
         generateMovementsReport(db);
@@ -99,8 +101,24 @@ export default function Settings() {
   const overdueCount = db.tools.filter((t) => effectiveStatus(t) === "overdue").length;
 
   return (
-    <PageContainer title="Configurações">
+    <PageContainer title="Ajustes">
       <div className="flex flex-col gap-5 pb-6">
+        {/* User info */}
+        {profile && (
+          <Card className="flex items-center gap-3.5">
+            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-app-accent/20 text-lg font-bold text-app-accent">
+              {profile.name?.charAt(0).toUpperCase() ?? "?"}
+            </span>
+            <div className="flex-1">
+              <p className="text-base font-bold text-white">{profile.name || "Sem nome"}</p>
+              <p className="text-xs text-app-muted">{profile.email}</p>
+              <p className="text-[11px] font-semibold text-app-accent">
+                {profile.role === "admin" ? "Administrador" : "Usuário Padrão"}
+              </p>
+            </div>
+          </Card>
+        )}
+
         {/* Notifications */}
         <div className="flex flex-col gap-3">
           <SectionHeader title="Notificações" />
@@ -125,7 +143,7 @@ export default function Settings() {
                   <select
                     className={inputClass + " w-auto py-1.5"}
                     value={db.settings.alertDaysBefore}
-                    onChange={(e) => updateSettings({ alertDaysBefore: Number(e.target.value) })}
+                    onChange={(e) => void updateSettings({ alertDaysBefore: Number(e.target.value) })}
                   >
                     <option value={1}>1 dia</option>
                     <option value={2}>2 dias</option>
@@ -182,7 +200,7 @@ export default function Settings() {
             <div className="flex items-center gap-3">
               <Info size={14} className="w-7 text-app-accent" />
               <span className="flex-1 text-sm font-medium text-app-muted">Versão</span>
-              <span className="text-sm font-semibold text-white">1.0.0</span>
+              <span className="text-sm font-semibold text-white">2.0.0</span>
             </div>
             <Separator />
             <div className="flex items-center gap-3">
@@ -201,6 +219,12 @@ export default function Settings() {
               <BellRing size={14} className="w-7 text-app-accent" />
               <span className="flex-1 text-sm font-medium text-app-muted">Aluguéis atrasados</span>
               <span className={`text-sm font-semibold ${overdueCount > 0 ? "text-status-red" : "text-white"}`}>{overdueCount}</span>
+            </div>
+            <Separator />
+            <div className="flex items-center gap-3">
+              <Info size={14} className="w-7 text-app-accent" />
+              <span className="flex-1 text-sm font-medium text-app-muted">Usuários</span>
+              <span className="text-sm font-semibold text-white">{db.users.length}</span>
             </div>
           </Card>
         </div>

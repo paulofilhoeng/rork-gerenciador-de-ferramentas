@@ -75,12 +75,12 @@ function SiteEditDialog({ site, open, onClose }: { site: ConstructionSite | null
     setShowError(false);
   }, [open, site]);
 
-  const save = () => {
+  const save = async () => {
     if (!name.trim()) {
       setShowError(true);
       return;
     }
-    saveSite({
+    await saveSite({
       id: site?.id ?? newId(),
       name: name.trim(),
       address,
@@ -134,7 +134,7 @@ function SiteEditDialog({ site, open, onClose }: { site: ConstructionSite | null
             <button type="button" onClick={onClose} className="flex-1 rounded-xl border-[0.5px] border-app-separator bg-app-elevated py-3 text-sm font-semibold text-app-muted hover:text-white">
               Cancelar
             </button>
-            <button type="button" onClick={save} className="flex-1 rounded-xl bg-app-accent py-3 text-sm font-bold text-app-bg hover:opacity-90">
+            <button type="button" onClick={() => void save()} className="flex-1 rounded-xl bg-app-accent py-3 text-sm font-bold text-app-bg hover:opacity-90">
               Salvar
             </button>
           </div>
@@ -391,7 +391,7 @@ export function SiteDetail() {
             <AlertDialogAction
               className="bg-status-red text-white hover:bg-status-red/80"
               onClick={() => {
-                deleteSite(site.id);
+                void deleteSite(site.id);
                 toast.success("Obra excluída");
                 navigate("/obras");
               }}

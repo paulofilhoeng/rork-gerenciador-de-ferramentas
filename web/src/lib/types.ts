@@ -1,11 +1,16 @@
-/** Shared domain types mirroring the iOS ToolsLoc data model. */
+/** Shared domain types for ToolsLoc — now backed by Supabase. */
 
 export type ToolOwnership = "own" | "rented";
 export type ToolStatus = "available" | "inUse" | "maintenance" | "overdue";
 export type SiteStatus = "active" | "paused" | "completed";
 export type AttachmentType = "photo" | "video";
-export type AttachmentPurpose = "general" | "serialNumber" | "delivery" | "receipt" | "condition";
+export type AttachmentPurpose = "general" | "serialNumber" | "delivery" | "receipt" | "condition" | "invoice";
 export type StatusColor = "green" | "blue" | "red" | "orange" | "gray";
+export type AuditFrequency = "weekly" | "biweekly" | "monthly";
+export type AuditStatus = "confirmed" | "damaged";
+export type MaintenanceStatus = "active" | "completed";
+export type UserRole = "admin" | "user";
+export type ActivityAction = "create" | "edit" | "delete" | "move" | "audit" | "maintenance";
 
 export type MovementType =
   | "created"
@@ -19,7 +24,11 @@ export type MovementType =
   | "rentalStarted"
   | "rentalEnded"
   | "ownershipChanged"
-  | "notesChanged";
+  | "notesChanged"
+  | "auditConfirmed"
+  | "auditDamaged"
+  | "maintenanceStarted"
+  | "maintenanceReturned";
 
 export const OWNERSHIP_LABEL: Record<ToolOwnership, string> = {
   own: "Própria",
@@ -65,6 +74,10 @@ export const MOVEMENT_LABEL: Record<MovementType, string> = {
   rentalEnded: "Aluguel Encerrado",
   ownershipChanged: "Tipo Alterado",
   notesChanged: "Observações Atualizadas",
+  auditConfirmed: "Auditoria Confirmada",
+  auditDamaged: "Avaria Registrada",
+  maintenanceStarted: "Enviada para Manutenção",
+  maintenanceReturned: "Retorno de Manutenção",
 };
 
 export const MOVEMENT_COLOR: Record<MovementType, StatusColor> = {
@@ -80,6 +93,10 @@ export const MOVEMENT_COLOR: Record<MovementType, StatusColor> = {
   rentalEnded: "red",
   ownershipChanged: "orange",
   notesChanged: "gray",
+  auditConfirmed: "green",
+  auditDamaged: "red",
+  maintenanceStarted: "orange",
+  maintenanceReturned: "green",
 };
 
 export const ATTACHMENT_PURPOSE_LABEL: Record<AttachmentPurpose, string> = {
@@ -88,6 +105,52 @@ export const ATTACHMENT_PURPOSE_LABEL: Record<AttachmentPurpose, string> = {
   delivery: "Entrega",
   receipt: "Recebimento",
   condition: "Estado/Condição",
+  invoice: "Nota Fiscal/Orçamento",
+};
+
+export const AUDIT_FREQUENCY_LABEL: Record<AuditFrequency, string> = {
+  weekly: "Semanal",
+  biweekly: "Quinzenal",
+  monthly: "Mensal",
+};
+
+export const AUDIT_FREQUENCY_DAYS: Record<AuditFrequency, number> = {
+  weekly: 7,
+  biweekly: 15,
+  monthly: 30,
+};
+
+export const AUDIT_STATUS_LABEL: Record<AuditStatus, string> = {
+  confirmed: "Confirmada",
+  damaged: "Avariada",
+};
+
+export const MAINTENANCE_STATUS_LABEL: Record<MaintenanceStatus, string> = {
+  active: "Em Manutenção",
+  completed: "Concluída",
+};
+
+export const USER_ROLE_LABEL: Record<UserRole, string> = {
+  admin: "Administrador",
+  user: "Usuário Padrão",
+};
+
+export const ACTIVITY_ACTION_LABEL: Record<ActivityAction, string> = {
+  create: "Criação",
+  edit: "Edição",
+  delete: "Exclusão",
+  move: "Movimentação",
+  audit: "Auditoria",
+  maintenance: "Manutenção",
+};
+
+export const ACTIVITY_ACTION_COLOR: Record<ActivityAction, StatusColor> = {
+  create: "green",
+  edit: "blue",
+  delete: "red",
+  move: "blue",
+  audit: "orange",
+  maintenance: "gray",
 };
 
 export interface Tool {
@@ -107,6 +170,9 @@ export interface Tool {
   rentalCompanyId: string | null;
   currentSiteId: string | null;
   currentEmployeeId: string | null;
+  auditFrequency: AuditFrequency;
+  lastAuditDate: string | null;
+  nextAuditDate: string | null;
 }
 
 export interface RentalCompany {
@@ -150,6 +216,8 @@ export interface ToolMovement {
   newValue: string;
   timestamp: string;
   attachmentIds: string[];
+  userId: string | null;
+  userName: string;
 }
 
 export interface ToolAttachment {
@@ -160,6 +228,54 @@ export interface ToolAttachment {
   purpose: AttachmentPurpose;
   dataUrl: string;
   caption: string;
+  createdAt: string;
+}
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  active: boolean;
+  createdAt: string;
+}
+
+export interface AuditRecord {
+  id: string;
+  toolId: string;
+  userId: string | null;
+  userName: string;
+  status: AuditStatus;
+  damageDescription: string;
+  auditDate: string;
+  nextAuditDate: string | null;
+}
+
+export interface MaintenanceRecord {
+  id: string;
+  toolId: string;
+  userId: string | null;
+  userName: string;
+  repairCost: number;
+  invoiceNumber: string;
+  invoiceAttachmentId: string | null;
+  startDate: string | null;
+  returnDate: string | null;
+  status: MaintenanceStatus;
+}
+
+export interface ActivityLog {
+  id: string;
+  userId: string | null;
+  userEmail: string;
+  userName: string;
+  action: ActivityAction;
+  entityType: string;
+  entityId: string;
+  entityName: string;
+  oldValues: Record<string, unknown> | null;
+  newValues: Record<string, unknown> | null;
+  siteId: string | null;
   createdAt: string;
 }
 
@@ -175,14 +291,17 @@ export interface DB {
   employees: Employee[];
   movements: ToolMovement[];
   attachments: ToolAttachment[];
+  audits: AuditRecord[];
+  maintenance: MaintenanceRecord[];
+  activityLogs: ActivityLog[];
+  users: UserProfile[];
   settings: AppSettings;
 }
 
-// MARK: - Derived helpers (mirror iOS computed properties)
+// MARK: - Derived helpers
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** Effective status: rented tools past their return date are overdue. */
 export function effectiveStatus(tool: Tool): ToolStatus {
   if (tool.ownership === "rented" && tool.rentalEndDate && new Date(tool.rentalEndDate).getTime() < Date.now()) {
     return "overdue";
@@ -190,24 +309,60 @@ export function effectiveStatus(tool: Tool): ToolStatus {
   return tool.baseStatus;
 }
 
-/** Days until the rental return date (negative when overdue). */
 export function daysRemaining(tool: Tool): number | null {
   if (tool.ownership !== "rented" || !tool.rentalEndDate) return null;
   const diff = new Date(tool.rentalEndDate).getTime() - Date.now();
   return diff >= 0 ? Math.floor(diff / DAY_MS) : -Math.ceil(-diff / DAY_MS);
 }
 
-/** Accumulated rental cost since the rental start date. */
 export function totalRentalCost(tool: Tool): number {
   if (tool.ownership !== "rented" || !tool.rentalStartDate) return 0;
   const days = Math.floor((Date.now() - new Date(tool.rentalStartDate).getTime()) / DAY_MS);
   return Math.max(days, 1) * tool.dailyRentalCost;
 }
 
-/** Whether the rental ends within the next 3 days. */
 export function isRentalEndingSoon(tool: Tool): boolean {
   const days = daysRemaining(tool);
   return days !== null && days >= 0 && days <= 3;
+}
+
+/** Whether the audit due date has passed. */
+export function isAuditDue(tool: Tool): boolean {
+  if (!tool.nextAuditDate) return false;
+  return new Date(tool.nextAuditDate).getTime() < Date.now();
+}
+
+/** Days until the next audit (negative = overdue). */
+export function auditDaysRemaining(tool: Tool): number | null {
+  if (!tool.nextAuditDate) return null;
+  const diff = new Date(tool.nextAuditDate).getTime() - Date.now();
+  return diff >= 0 ? Math.floor(diff / DAY_MS) : -Math.ceil(-diff / DAY_MS);
+}
+
+/** Compute the next audit date based on frequency. */
+export function computeNextAuditDate(frequency: AuditFrequency, from: Date = new Date()): string {
+  const days = AUDIT_FREQUENCY_DAYS[frequency];
+  const next = new Date(from.getTime() + days * DAY_MS);
+  return next.toISOString().split("T")[0];
+}
+
+/** Get audit status label for a tool. */
+export function auditStatusLabel(tool: Tool): string {
+  if (tool.baseStatus === "maintenance") return "Em Manutenção";
+  const days = auditDaysRemaining(tool);
+  if (days === null) return "Sem auditoria";
+  if (days < 0) return `Atrasada ${Math.abs(days)}d`;
+  if (days === 0) return "Vence hoje";
+  return `Em ${days}d`;
+}
+
+export function auditStatusColor(tool: Tool): StatusColor {
+  if (tool.baseStatus === "maintenance") return "gray";
+  const days = auditDaysRemaining(tool);
+  if (days === null) return "gray";
+  if (days < 0) return "red";
+  if (days <= 3) return "orange";
+  return "green";
 }
 
 export function newId(): string {

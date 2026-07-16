@@ -13,6 +13,11 @@
       "name": "ToolsLoc",
       "path": "web",
       "framework": "web"
+    },
+    {
+      "name": "Backend",
+      "path": "backend",
+      "framework": "supabase"
     }
   ]
 }

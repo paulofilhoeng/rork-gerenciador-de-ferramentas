@@ -45,12 +45,12 @@ function CompanyEditDialog({ company, open, onClose }: { company: RentalCompany 
     setShowError(false);
   }, [open, company]);
 
-  const save = () => {
+  const save = async () => {
     if (!name.trim()) {
       setShowError(true);
       return;
     }
-    saveCompany({
+    await saveCompany({
       id: company?.id ?? newId(),
       name: name.trim(),
       cnpj,
@@ -96,7 +96,7 @@ function CompanyEditDialog({ company, open, onClose }: { company: RentalCompany 
             <button type="button" onClick={onClose} className="flex-1 rounded-xl border-[0.5px] border-app-separator bg-app-elevated py-3 text-sm font-semibold text-app-muted hover:text-white">
               Cancelar
             </button>
-            <button type="button" onClick={save} className="flex-1 rounded-xl bg-app-accent py-3 text-sm font-bold text-app-bg hover:opacity-90">
+            <button type="button" onClick={() => void save()} className="flex-1 rounded-xl bg-app-accent py-3 text-sm font-bold text-app-bg hover:opacity-90">
               Salvar
             </button>
           </div>
@@ -310,7 +310,7 @@ export function CompanyDetail() {
             <AlertDialogAction
               className="bg-status-red text-white hover:bg-status-red/80"
               onClick={() => {
-                deleteCompany(company.id);
+                void deleteCompany(company.id);
                 toast.success("Locadora excluída");
                 navigate("/locadoras");
               }}
