@@ -31,7 +31,7 @@ export default function Login() {
         toast.success("Login realizado");
       } else {
         await signUp(email.trim(), password, name.trim());
-        toast.success("Conta criada! Verifique seu e-mail se necessário.");
+        toast.success("Conta criada com sucesso! Você já pode fazer login.");
       }
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Falha na autenticação";
