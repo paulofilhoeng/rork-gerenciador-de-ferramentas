@@ -18,8 +18,8 @@ export function MaintenanceReturnDialog({
   open: boolean;
   onClose: () => void;
 }) {
-  const { returnFromMaintenance } = useData();
-  const { profile } = useAuth();
+  const { returnFromMaintenance, hasPermission } = useData();
+  const { profile, isAdmin } = useAuth();
   const [repairCost, setRepairCost] = useState("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [invoiceDataUrl, setInvoiceDataUrl] = useState<string | null>(null);
@@ -37,6 +37,10 @@ export function MaintenanceReturnDialog({
 
   const handleReturn = async () => {
     if (!tool) return;
+    if (!isAdmin && profile && !hasPermission(profile.id, tool.currentSiteId, "Retorno de manutenção")) {
+      toast.error("Você não tem permissão para registrar retorno de manutenção nesta obra.");
+      return;
+    }
     const cost = Number(repairCost);
     if (!repairCost || isNaN(cost) || cost < 0) {
       toast.error("Informe o valor do reparo");

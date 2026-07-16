@@ -80,6 +80,7 @@ export function ToolEditDialog({ tool, open, onClose }: Props) {
       auditFrequency,
       lastAuditDate: tool?.lastAuditDate ?? null,
       nextAuditDate: tool?.nextAuditDate ?? computeNextAuditDate(auditFrequency),
+      statusUpdatedAt: tool?.statusUpdatedAt ?? null,
     };
 
     // Record movement diffs for existing tools

@@ -100,6 +100,7 @@ export function buildSeedData(): DB {
     currentSiteId: null as string | null,
     currentEmployeeId: null as string | null,
     createdAt: now,
+    statusUpdatedAt: now,
     auditFrequency: "monthly" as AuditFrequency,
     lastAuditDate: null as string | null,
     nextAuditDate: computeNextAuditDate("monthly") as string | null,
@@ -142,6 +143,8 @@ export function buildSeedData(): DB {
     maintenance: [],
     activityLogs: [],
     users: [],
+    movementTypes: [],
+    siteUserPermissions: [],
     settings: { notificationsEnabled: false, alertDaysBefore: 3 },
   };
 }

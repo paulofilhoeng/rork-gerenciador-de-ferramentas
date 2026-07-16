@@ -14,11 +14,14 @@ import type {
   DB,
   Employee,
   MaintenanceRecord,
+  MovementTypeEntity,
   RentalCompany,
+  SiteUserPermission,
   Tool,
   ToolAttachment,
   ToolMovement,
   UserProfile,
+  UserRole,
 } from "./types";
 import { AUDIT_FREQUENCY_DAYS, computeNextAuditDate, newId } from "./types";
 
@@ -43,6 +46,7 @@ function mapTool(row: Record<string, unknown>): Tool {
     auditFrequency: (row.audit_frequency as AuditFrequency) ?? "monthly",
     lastAuditDate: (row.last_audit_date as string) ?? null,
     nextAuditDate: (row.next_audit_date as string) ?? null,
+    statusUpdatedAt: (row.status_updated_at as string) ?? null,
   };
 }
 
@@ -175,6 +179,31 @@ function mapSettings(row: Record<string, unknown>): AppSettings {
   };
 }
 
+function mapMovementType(row: Record<string, unknown>): MovementTypeEntity {
+  return {
+    id: row.id as string,
+    name: (row.name as string) ?? "",
+    description: (row.description as string) ?? "",
+    isActive: Boolean(row.is_active),
+    isSystem: Boolean(row.is_system),
+    sortOrder: Number(row.sort_order) ?? 0,
+    createdAt: (row.created_at as string) ?? new Date().toISOString(),
+    updatedAt: (row.updated_at as string) ?? new Date().toISOString(),
+  };
+}
+
+function mapSiteUserPermission(row: Record<string, unknown>): SiteUserPermission {
+  return {
+    id: row.id as string,
+    siteId: (row.site_id as string) ?? "",
+    userId: (row.user_id as string) ?? "",
+    movementTypeId: (row.movement_type_id as string) ?? "",
+    allowed: Boolean(row.allowed),
+    createdAt: (row.created_at as string) ?? new Date().toISOString(),
+    updatedAt: (row.updated_at as string) ?? new Date().toISOString(),
+  };
+}
+
 const EMPTY_DB: DB = {
   tools: [],
   companies: [],
@@ -186,6 +215,8 @@ const EMPTY_DB: DB = {
   maintenance: [],
   activityLogs: [],
   users: [],
+  movementTypes: [],
+  siteUserPermissions: [],
   settings: { notificationsEnabled: false, alertDaysBefore: 3 },
 };
 
@@ -207,9 +238,13 @@ interface DataContextValue {
   reportDamage: (toolId: string, description: string) => Promise<void>;
   startMaintenance: (toolId: string) => Promise<void>;
   returnFromMaintenance: (toolId: string, repairCost: number, invoiceNumber: string, invoiceAttachment: ToolAttachment | null) => Promise<void>;
-  saveUser: (user: UserProfile) => Promise<void>;
+  saveUser: (user: UserProfile, previousRole?: UserRole) => Promise<void>;
   deleteUser: (id: string) => Promise<void>;
   updateSettings: (partial: Partial<AppSettings>) => Promise<void>;
+  saveMovementType: (mt: MovementTypeEntity) => Promise<void>;
+  toggleMovementType: (id: string, isActive: boolean) => Promise<void>;
+  savePermission: (siteId: string, userId: string, movementTypeId: string, allowed: boolean) => Promise<void>;
+  hasPermission: (userId: string, siteId: string | null, movementTypeName: string) => boolean;
 }
 
 function useDataHook() {
@@ -242,6 +277,8 @@ function useDataHook() {
           activityRes,
           profilesRes,
           settingsRes,
+          movementTypesRes,
+          permissionsRes,
         ] = await Promise.all([
           supabase.from("tools").select("*"),
           supabase.from("rental_companies").select("*"),
@@ -254,7 +291,11 @@ function useDataHook() {
           supabase.from("activity_logs").select("*").order("created_at", { ascending: false }).limit(500),
           supabase.from("profiles").select("*"),
           supabase.from("app_settings").select("*").eq("id", 1).maybeSingle(),
+          supabase.from("movement_types").select("*").order("sort_order", { ascending: true }),
+          supabase.from("site_user_permissions").select("*"),
         ]);
+
+        if (cancelled) return;
 
         if (cancelled) return;
 
@@ -278,6 +319,8 @@ function useDataHook() {
           maintenance: (maintenanceRes.data ?? []).map((r) => mapMaintenance(r as Record<string, unknown>)),
           activityLogs: (activityRes.data ?? []).map((r) => mapActivityLog(r as Record<string, unknown>)),
           users: (profilesRes.data ?? []).map((r) => mapProfile(r as Record<string, unknown>)),
+          movementTypes: (movementTypesRes.data ?? []).map((r) => mapMovementType(r as Record<string, unknown>)),
+          siteUserPermissions: (permissionsRes.data ?? []).map((r) => mapSiteUserPermission(r as Record<string, unknown>)),
           settings: settingsRes.data ? mapSettings(settingsRes.data as Record<string, unknown>) : { notificationsEnabled: false, alertDaysBefore: 3 },
         });
       } catch (error) {
@@ -377,6 +420,22 @@ function useDataHook() {
           setDB((prev) => ({ ...prev, settings: mapSettings(payload.new as Record<string, unknown>) }));
         }
       })
+      .on("postgres_changes", { event: "*", schema: "public", table: "movement_types" }, (payload) => {
+        setDB((prev) => {
+          if (payload.eventType === "DELETE") return { ...prev, movementTypes: prev.movementTypes.filter((m) => m.id !== (payload.old as Record<string, unknown>).id) };
+          const newRow = mapMovementType(payload.new as Record<string, unknown>);
+          const exists = prev.movementTypes.some((m) => m.id === newRow.id);
+          return { ...prev, movementTypes: exists ? prev.movementTypes.map((m) => (m.id === newRow.id ? newRow : m)) : [...prev.movementTypes, newRow] };
+        });
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "site_user_permissions" }, (payload) => {
+        setDB((prev) => {
+          if (payload.eventType === "DELETE") return { ...prev, siteUserPermissions: prev.siteUserPermissions.filter((p) => p.id !== (payload.old as Record<string, unknown>).id) };
+          const newRow = mapSiteUserPermission(payload.new as Record<string, unknown>);
+          const exists = prev.siteUserPermissions.some((p) => p.id === newRow.id);
+          return { ...prev, siteUserPermissions: exists ? prev.siteUserPermissions.map((p) => (p.id === newRow.id ? newRow : p)) : [...prev.siteUserPermissions, newRow] };
+        });
+      })
       .subscribe();
 
     return () => {
@@ -435,6 +494,10 @@ function useDataHook() {
 
   const saveTool = useCallback(
     async (tool: Tool) => {
+      const { data: existingTool } = await supabase.from("tools").select("id, base_status").eq("id", tool.id).maybeSingle();
+      const isNew = !existingTool;
+      const statusChanged = !isNew && (existingTool as Record<string, unknown>)?.base_status !== tool.baseStatus;
+
       const row = {
         id: tool.id,
         name: tool.name,
@@ -454,10 +517,8 @@ function useDataHook() {
         audit_frequency: tool.auditFrequency,
         last_audit_date: tool.lastAuditDate,
         next_audit_date: tool.nextAuditDate ?? computeNextAuditDate(tool.auditFrequency),
+        status_updated_at: statusChanged ? new Date().toISOString() : isNew ? new Date().toISOString() : undefined,
       };
-
-      const { data: existing } = await supabase.from("tools").select("id").eq("id", tool.id).maybeSingle();
-      const isNew = !existing;
 
       const { error } = await supabase.from("tools").upsert(row);
       if (error) {
@@ -698,6 +759,7 @@ function useDataHook() {
         .from("tools")
         .update({
           base_status: "maintenance",
+          status_updated_at: now.toISOString(),
           last_audit_date: now.toISOString(),
           next_audit_date: nextDate,
         })
@@ -738,7 +800,7 @@ function useDataHook() {
       });
 
       const oldSite = tool.currentSiteId;
-      await supabase.from("tools").update({ base_status: "maintenance", current_site_id: null }).eq("id", toolId);
+      await supabase.from("tools").update({ base_status: "maintenance", status_updated_at: now.toISOString(), current_site_id: null }).eq("id", toolId);
 
       const siteName = oldSite ? db.sites.find((s) => s.id === oldSite)?.name ?? "—" : "—";
       await insertMovements([
@@ -787,7 +849,7 @@ function useDataHook() {
           .eq("id", activeRecord.id);
       }
 
-      await supabase.from("tools").update({ base_status: "available" }).eq("id", toolId);
+      await supabase.from("tools").update({ base_status: "available", status_updated_at: now.toISOString() }).eq("id", toolId);
 
       await insertMovements([
         {
@@ -810,7 +872,7 @@ function useDataHook() {
   );
 
   const saveUser = useCallback(
-    async (updatedUser: UserProfile) => {
+    async (updatedUser: UserProfile, previousRole?: UserRole) => {
       const { error } = await supabase
         .from("profiles")
         .update({ name: updatedUser.name, role: updatedUser.role, active: updatedUser.active })
@@ -819,7 +881,11 @@ function useDataHook() {
         toast.error("Falha ao atualizar usuário");
         return;
       }
-      await logActivity("edit", "user", updatedUser.id, updatedUser.name);
+      if (previousRole && previousRole !== updatedUser.role) {
+        await logActivity("roleChange", "user", updatedUser.id, updatedUser.name, { role: previousRole }, { role: updatedUser.role });
+      } else {
+        await logActivity("edit", "user", updatedUser.id, updatedUser.name);
+      }
     },
     [logActivity],
   );
@@ -849,6 +915,82 @@ function useDataHook() {
     if (error) toast.error("Falha ao salvar configurações");
   }, [db.settings]);
 
+  // MARK: - Movement types CRUD
+
+  const saveMovementType = useCallback(
+    async (mt: MovementTypeEntity) => {
+      const { data: existing } = await supabase.from("movement_types").select("id").eq("id", mt.id).maybeSingle();
+      const isNew = !existing;
+      const { error } = await supabase.from("movement_types").upsert({
+        id: mt.id,
+        name: mt.name,
+        description: mt.description,
+        is_active: mt.isActive,
+        is_system: mt.isSystem,
+        sort_order: mt.sortOrder,
+      });
+      if (error) {
+        toast.error("Falha ao salvar tipo de movimentação");
+        return;
+      }
+      await logActivity("movementTypeManage", "movement_type", mt.id, mt.name, undefined, { name: mt.name, description: mt.description, isNew });
+    },
+    [logActivity],
+  );
+
+  const toggleMovementType = useCallback(
+    async (id: string, isActive: boolean) => {
+      const mt = db.movementTypes.find((m) => m.id === id);
+      const { error } = await supabase.from("movement_types").update({ is_active: isActive, updated_at: new Date().toISOString() }).eq("id", id);
+      if (error) {
+        toast.error("Falha ao atualizar tipo de movimentação");
+        return;
+      }
+      if (mt) await logActivity("movementTypeManage", "movement_type", id, mt.name, { isActive: mt.isActive }, { isActive });
+    },
+    [db.movementTypes, logActivity],
+  );
+
+  // MARK: - Site user permissions
+
+  const savePermission = useCallback(
+    async (siteId: string, userId: string, movementTypeId: string, allowed: boolean) => {
+      const { data: existing } = await supabase
+        .from("site_user_permissions")
+        .select("id")
+        .eq("site_id", siteId)
+        .eq("user_id", userId)
+        .eq("movement_type_id", movementTypeId)
+        .maybeSingle();
+
+      if (existing) {
+        await supabase.from("site_user_permissions").update({ allowed, updated_at: new Date().toISOString() }).eq("id", (existing as Record<string, unknown>).id as string);
+      } else {
+        await supabase.from("site_user_permissions").insert({ site_id: siteId, user_id: userId, movement_type_id: movementTypeId, allowed });
+      }
+
+      const mt = db.movementTypes.find((m) => m.id === movementTypeId);
+      const site = db.sites.find((s) => s.id === siteId);
+      const targetUser = db.users.find((u) => u.id === userId);
+      if (mt && site && targetUser) {
+        await logActivity("permissionChange", "permission", `${siteId}:${userId}:${movementTypeId}`, `${targetUser.name} — ${site.name} — ${mt.name}`, undefined, { allowed, movementType: mt.name, site: site.name, user: targetUser.name }, siteId);
+      }
+    },
+    [db.movementTypes, db.sites, db.users, logActivity],
+  );
+
+  const hasPermission = useCallback(
+    (userId: string, siteId: string | null, movementTypeName: string): boolean => {
+      if (!siteId) return false;
+      const mt = db.movementTypes.find((m) => m.name === movementTypeName && m.isActive);
+      if (!mt) return false;
+      return db.siteUserPermissions.some(
+        (p) => p.siteId === siteId && p.userId === userId && p.movementTypeId === mt.id && p.allowed,
+      );
+    },
+    [db.movementTypes, db.siteUserPermissions],
+  );
+
   return {
     db,
     loading,
@@ -870,6 +1012,10 @@ function useDataHook() {
     saveUser,
     deleteUser,
     updateSettings,
+    saveMovementType,
+    toggleMovementType,
+    savePermission,
+    hasPermission,
   };
 }
 

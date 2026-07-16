@@ -22,7 +22,8 @@ import { USER_ROLE_LABEL } from "@/lib/types";
 import { formatShortDate } from "@/lib/format";
 
 function UserEditDialog({ user, open, onClose }: { user: UserProfile | null; open: boolean; onClose: () => void }) {
-  const { saveUser } = useData();
+  const { saveUser, db } = useData();
+  const { profile: currentUser } = useAuth();
   const [name, setName] = useState("");
   const [role, setRole] = useState<UserRole>("user");
   const [active, setActive] = useState(true);
@@ -34,9 +35,32 @@ function UserEditDialog({ user, open, onClose }: { user: UserProfile | null; ope
     setActive(user.active);
   }, [open, user]);
 
-  const save = () => {
+  const save = async () => {
     if (!user) return;
-    saveUser({ ...user, name, role, active });
+
+    // Prevent self-demotion if last admin
+    if (
+      user.id === currentUser?.id &&
+      user.role === "admin" &&
+      role === "user"
+    ) {
+      const adminCount = db.users.filter((u) => u.role === "admin" && u.active).length;
+      if (adminCount <= 1) {
+        toast.error("Você é o único administrador ativo. Não pode se rebaixar.");
+        return;
+      }
+    }
+
+    // Also prevent demoting the last other admin
+    if (user.role === "admin" && role === "user" && user.id !== currentUser?.id) {
+      const adminCount = db.users.filter((u) => u.role === "admin" && u.active).length;
+      if (adminCount <= 1) {
+        toast.error("Este é o único administrador ativo. Não pode ser rebaixado.");
+        return;
+      }
+    }
+
+    await saveUser({ ...user, name, role, active }, user.role);
     toast.success("Usuário atualizado");
     onClose();
   };
@@ -71,7 +95,7 @@ function UserEditDialog({ user, open, onClose }: { user: UserProfile | null; ope
             <button type="button" onClick={onClose} className="flex-1 rounded-xl border-[0.5px] border-app-separator bg-app-elevated py-3 text-sm font-semibold text-app-muted hover:text-white">
               Cancelar
             </button>
-            <button type="button" onClick={save} className="flex-1 rounded-xl bg-app-accent py-3 text-sm font-bold text-app-bg hover:opacity-90">
+            <button type="button" onClick={() => void save()} className="flex-1 rounded-xl bg-app-accent py-3 text-sm font-bold text-app-bg hover:opacity-90">
               Salvar
             </button>
           </div>

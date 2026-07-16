@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { ClipboardList, Hammer, LayoutGrid, LogOut, Settings, Shield, Users, Wrench } from "lucide-react";
+import { ClipboardList, Hammer, LayoutGrid, LogOut, Settings, Shield, Users, ArrowLeftRight, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
 import { USER_ROLE_LABEL } from "@/lib/types";
@@ -16,7 +16,10 @@ const NAV_ITEMS = [
   { to: "/ajustes", label: "Ajustes", icon: Settings },
 ];
 
-const ADMIN_ONLY_ITEMS = [{ to: "/usuarios", label: "Usuários", icon: Users }];
+const ADMIN_ONLY_ITEMS = [
+  { to: "/usuarios", label: "Usuários", icon: Users },
+  { to: "/tipos-movimentacao", label: "Tipos de Mov.", icon: ArrowLeftRight },
+];
 
 export function Layout({ children }: { children: ReactNode }) {
   const { profile, signOut, isAdmin } = useAuth();

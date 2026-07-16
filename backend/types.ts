@@ -247,6 +247,39 @@ export type Database = {
           },
         ]
       }
+      movement_types: {
+        Row: {
+          created_at: string
+          description: string
+          id: string
+          is_active: boolean
+          is_system: boolean
+          name: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string
+          id?: string
+          is_active?: boolean
+          is_system?: boolean
+          name: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          id?: string
+          is_active?: boolean
+          is_system?: boolean
+          name?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           active: boolean
@@ -309,6 +342,58 @@ export type Database = {
           phone?: string | null
         }
         Relationships: []
+      }
+      site_user_permissions: {
+        Row: {
+          allowed: boolean
+          created_at: string
+          id: string
+          movement_type_id: string
+          site_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          allowed?: boolean
+          created_at?: string
+          id?: string
+          movement_type_id: string
+          site_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          allowed?: boolean
+          created_at?: string
+          id?: string
+          movement_type_id?: string
+          site_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "site_user_permissions_movement_type_id_fkey"
+            columns: ["movement_type_id"]
+            isOneToOne: false
+            referencedRelation: "movement_types"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "site_user_permissions_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "construction_sites"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "site_user_permissions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       tool_attachments: {
         Row: {
@@ -423,6 +508,7 @@ export type Database = {
           rental_end_date: string | null
           rental_start_date: string | null
           serial_number: string | null
+          status_updated_at: string | null
         }
         Insert: {
           audit_frequency?: string | null
@@ -444,6 +530,7 @@ export type Database = {
           rental_end_date?: string | null
           rental_start_date?: string | null
           serial_number?: string | null
+          status_updated_at?: string | null
         }
         Update: {
           audit_frequency?: string | null
@@ -465,6 +552,7 @@ export type Database = {
           rental_end_date?: string | null
           rental_start_date?: string | null
           serial_number?: string | null
+          status_updated_at?: string | null
         }
         Relationships: [
           {

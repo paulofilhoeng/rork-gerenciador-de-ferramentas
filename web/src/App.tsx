@@ -16,6 +16,7 @@ import Companies, { CompanyDetail } from "./pages/Companies";
 import Sites, { SiteDetail } from "./pages/Sites";
 import Employees, { EmployeeDetail } from "./pages/Employees";
 import Users from "./pages/Users";
+import MovementTypes from "./pages/MovementTypes";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
@@ -86,6 +87,7 @@ function AppRoutes() {
           <Route path="/funcionarios/:id" element={<ProtectedRoute><EmployeeDetail /></ProtectedRoute>} />
           <Route path="/relatorios" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
           <Route path="/usuarios" element={<ProtectedRoute adminOnly><Users /></ProtectedRoute>} />
+          <Route path="/tipos-movimentacao" element={<ProtectedRoute adminOnly><MovementTypes /></ProtectedRoute>} />
           <Route path="/ajustes" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
           <Route path="*" element={<NotFound />} />
         </Routes>

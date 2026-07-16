@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageContainer } from "@/components/Layout";
+import { PermissionMatrix } from "@/components/PermissionMatrix";
 import {
   COLOR_TEXT,
   Card,
@@ -30,6 +31,7 @@ import {
   inputClass,
 } from "@/components/shared";
 import { useData } from "@/lib/store";
+import { useAuth } from "@/lib/auth";
 import type { ConstructionSite, SiteStatus } from "@/lib/types";
 import {
   SITE_STATUS_COLOR,
@@ -148,6 +150,7 @@ function SiteEditDialog({ site, open, onClose }: { site: ConstructionSite | null
 
 export default function Sites() {
   const { db } = useData();
+  const { isAdmin } = useAuth();
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<SiteStatus | null>(null);
   const [showAdd, setShowAdd] = useState(false);
@@ -218,7 +221,7 @@ export default function Sites() {
           </div>
         )}
       </div>
-      <Fab label="Nova obra" onClick={() => setShowAdd(true)} />
+      {isAdmin && <Fab label="Nova obra" onClick={() => setShowAdd(true)} />}
       <SiteEditDialog site={null} open={showAdd} onClose={() => setShowAdd(false)} />
     </PageContainer>
   );
@@ -230,6 +233,7 @@ export function SiteDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { db, deleteSite } = useData();
+  const { isAdmin } = useAuth();
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
 
@@ -263,9 +267,11 @@ export function SiteDetail() {
           <button type="button" onClick={() => navigate("/obras")} className="flex items-center gap-1.5 rounded-[10px] px-3 py-2 text-sm font-semibold text-app-muted hover:text-white">
             <ArrowLeft size={15} /> Voltar
           </button>
-          <button type="button" onClick={() => setShowEdit(true)} className="rounded-[10px] bg-app-accent/15 px-4 py-2 text-sm font-semibold text-app-accent hover:bg-app-accent/25">
-            Editar
-          </button>
+          {isAdmin && (
+            <button type="button" onClick={() => setShowEdit(true)} className="rounded-[10px] bg-app-accent/15 px-4 py-2 text-sm font-semibold text-app-accent hover:bg-app-accent/25">
+              Editar
+            </button>
+          )}
         </div>
       }
     >
@@ -368,13 +374,17 @@ export function SiteDetail() {
           )}
         </Card>
 
-        <button
-          type="button"
-          onClick={() => setShowDelete(true)}
-          className="flex items-center justify-center gap-2 rounded-xl bg-status-red/10 py-3.5 text-[15px] font-semibold text-status-red hover:bg-status-red/20"
-        >
-          <Trash2 size={15} /> Excluir Obra
-        </button>
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={() => setShowDelete(true)}
+            className="flex items-center justify-center gap-2 rounded-xl bg-status-red/10 py-3.5 text-[15px] font-semibold text-status-red hover:bg-status-red/20"
+          >
+            <Trash2 size={15} /> Excluir Obra
+          </button>
+        )}
+
+        {isAdmin && <PermissionMatrix siteId={site.id} />}
       </div>
 
       <SiteEditDialog site={site} open={showEdit} onClose={() => setShowEdit(false)} />

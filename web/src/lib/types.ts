@@ -10,7 +10,16 @@ export type AuditFrequency = "weekly" | "biweekly" | "monthly";
 export type AuditStatus = "confirmed" | "damaged";
 export type MaintenanceStatus = "active" | "completed";
 export type UserRole = "admin" | "user";
-export type ActivityAction = "create" | "edit" | "delete" | "move" | "audit" | "maintenance";
+export type ActivityAction =
+  | "create"
+  | "edit"
+  | "delete"
+  | "move"
+  | "audit"
+  | "maintenance"
+  | "roleChange"
+  | "permissionChange"
+  | "movementTypeManage";
 
 export type MovementType =
   | "created"
@@ -142,6 +151,9 @@ export const ACTIVITY_ACTION_LABEL: Record<ActivityAction, string> = {
   move: "Movimentação",
   audit: "Auditoria",
   maintenance: "Manutenção",
+  roleChange: "Alteração de Nível",
+  permissionChange: "Alteração de Permissão",
+  movementTypeManage: "Gestão de Tipo de Movimentação",
 };
 
 export const ACTIVITY_ACTION_COLOR: Record<ActivityAction, StatusColor> = {
@@ -151,6 +163,9 @@ export const ACTIVITY_ACTION_COLOR: Record<ActivityAction, StatusColor> = {
   move: "blue",
   audit: "orange",
   maintenance: "gray",
+  roleChange: "orange",
+  permissionChange: "blue",
+  movementTypeManage: "orange",
 };
 
 export interface Tool {
@@ -167,6 +182,7 @@ export interface Tool {
   rentalStartDate: string | null;
   rentalEndDate: string | null;
   createdAt: string;
+  statusUpdatedAt: string | null;
   rentalCompanyId: string | null;
   currentSiteId: string | null;
   currentEmployeeId: string | null;
@@ -284,6 +300,27 @@ export interface AppSettings {
   alertDaysBefore: number;
 }
 
+export interface MovementTypeEntity {
+  id: string;
+  name: string;
+  description: string;
+  isActive: boolean;
+  isSystem: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SiteUserPermission {
+  id: string;
+  siteId: string;
+  userId: string;
+  movementTypeId: string;
+  allowed: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface DB {
   tools: Tool[];
   companies: RentalCompany[];
@@ -295,6 +332,8 @@ export interface DB {
   maintenance: MaintenanceRecord[];
   activityLogs: ActivityLog[];
   users: UserProfile[];
+  movementTypes: MovementTypeEntity[];
+  siteUserPermissions: SiteUserPermission[];
   settings: AppSettings;
 }
 

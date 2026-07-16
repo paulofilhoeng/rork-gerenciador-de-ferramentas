@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { cn } from "@/lib/utils";
 import { Field, inputClass } from "@/components/shared";
 import { useData } from "@/lib/store";
+import { useAuth } from "@/lib/auth";
 import type { Tool } from "@/lib/types";
 
 export function AuditDialog({
@@ -16,13 +17,18 @@ export function AuditDialog({
   open: boolean;
   onClose: () => void;
 }) {
-  const { confirmAudit, reportDamage } = useData();
+  const { confirmAudit, reportDamage, hasPermission } = useData();
+  const { isAdmin, profile } = useAuth();
   const [mode, setMode] = useState<"confirm" | "damage">("confirm");
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleConfirm = async () => {
     if (!tool) return;
+    if (!isAdmin && profile && !hasPermission(profile.id, tool.currentSiteId, "Auditoria/conferência")) {
+      toast.error("Você não tem permissão para realizar auditorias nesta obra.");
+      return;
+    }
     setLoading(true);
     try {
       await confirmAudit(tool.id);
@@ -37,6 +43,10 @@ export function AuditDialog({
 
   const handleDamage = async () => {
     if (!tool) return;
+    if (!isAdmin && profile && !hasPermission(profile.id, tool.currentSiteId, "Auditoria/conferência")) {
+      toast.error("Você não tem permissão para realizar auditorias nesta obra.");
+      return;
+    }
     if (!description.trim()) {
       toast.error("Descreva a avaria/falha");
       return;

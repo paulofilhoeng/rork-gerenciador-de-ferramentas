@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowDownCircle, ArrowLeft, ArrowUpCircle, ClipboardCheck, Download, Hammer, Trash2, User, Wrench } from "lucide-react";
+import { ArrowDownCircle, ArrowLeft, ArrowUpCircle, ClipboardCheck, Clock, Download, Hammer, Trash2, User, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -61,8 +61,8 @@ import { cn } from "@/lib/utils";
 export default function ToolDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { db, deleteTool, addMovements, addAttachments, removeAttachment, startMaintenance } = useData();
-  const { isAdmin } = useAuth();
+  const { db, deleteTool, addMovements, addAttachments, removeAttachment, startMaintenance, hasPermission } = useData();
+  const { isAdmin, profile } = useAuth();
 
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
@@ -129,6 +129,10 @@ export default function ToolDetail() {
   };
 
   const handleStartMaintenance = async () => {
+    if (!isAdmin && profile && !hasPermission(profile.id, tool.currentSiteId, "Envio para manutenção")) {
+      toast.error("Você não tem permissão para enviar ferramentas para manutenção nesta obra.");
+      return;
+    }
     await startMaintenance(tool.id);
     toast.success("Ferramenta enviada para manutenção");
   };
@@ -268,6 +272,7 @@ export default function ToolDetail() {
           <DetailRow label="Marca" value={tool.brand || "—"} />
           <DetailRow label="Modelo" value={tool.model || "—"} />
           <DetailRow label="Código/Série" value={tool.serialNumber || "—"} />
+          <DetailRow label="Última atualização de status" value={tool.statusUpdatedAt ? formatDateTime(tool.statusUpdatedAt) : "—"} />
         </Card>
 
         {tool.notes && (

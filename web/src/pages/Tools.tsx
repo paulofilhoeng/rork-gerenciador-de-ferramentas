@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Calendar, Hammer, User, Wrench } from "lucide-react";
+import { Calendar, Clock, Hammer, User, Wrench } from "lucide-react";
 import { PageContainer } from "@/components/Layout";
 import {
   Card,
@@ -24,7 +24,7 @@ import {
   effectiveStatus,
   totalRentalCost,
 } from "@/lib/types";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 function ToolRow({ tool }: { tool: Tool }) {
@@ -72,6 +72,13 @@ function ToolRow({ tool }: { tool: Tool }) {
             {days < 0
               ? `Atrasado ${Math.abs(days)} dia(s) · ${formatCurrency(totalRentalCost(tool))}`
               : `Faltam ${days} dia(s) · ${formatCurrency(totalRentalCost(tool))}`}
+          </div>
+        )}
+
+        {tool.statusUpdatedAt && (
+          <div className="flex items-center gap-1.5 text-[10px] font-medium text-app-muted/60">
+            <Clock size={9} />
+            <span>Status atualizado em {formatDateTime(tool.statusUpdatedAt)}</span>
           </div>
         )}
       </Card>
