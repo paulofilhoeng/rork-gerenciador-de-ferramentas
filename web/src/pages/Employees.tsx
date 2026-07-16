@@ -39,6 +39,7 @@ function EmployeeEditDialog({ employee, open, onClose }: { employee: Employee | 
 
   const [name, setName] = useState("");
   const [role, setRole] = useState("");
+  const [level, setLevel] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [showError, setShowError] = useState(false);
@@ -47,6 +48,7 @@ function EmployeeEditDialog({ employee, open, onClose }: { employee: Employee | 
     if (!open) return;
     setName(employee?.name ?? "");
     setRole(employee?.role ?? "");
+    setLevel(employee?.level ?? "");
     setPhone(employee?.phone ?? "");
     setEmail(employee?.email ?? "");
     setShowError(false);
@@ -61,6 +63,7 @@ function EmployeeEditDialog({ employee, open, onClose }: { employee: Employee | 
       id: employee?.id ?? newId(),
       name: name.trim(),
       role,
+      level,
       phone,
       email,
       createdAt: employee?.createdAt ?? new Date().toISOString(),
@@ -81,6 +84,9 @@ function EmployeeEditDialog({ employee, open, onClose }: { employee: Employee | 
           </Field>
           <Field label="Função">
             <input className={inputClass} value={role} onChange={(e) => setRole(e.target.value)} />
+          </Field>
+          <Field label="Alçada">
+            <input className={inputClass} value={level} onChange={(e) => setLevel(e.target.value)} placeholder="Ex: Operário, Encarregado, Engenheiro" />
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Telefone">
@@ -137,7 +143,11 @@ export default function Employees() {
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-base font-semibold text-white">{employee.name}</p>
-                    {employee.role && <p className="truncate text-xs text-app-muted">{employee.role}</p>}
+                    {(employee.role || employee.level) && (
+                      <p className="truncate text-xs text-app-muted">
+                        {employee.role}{employee.role && employee.level ? " • " : ""}{employee.level}
+                      </p>
+                    )}
                   </div>
                   <div className="flex flex-col items-end">
                     <span className="text-lg font-bold text-app-accent">{toolCount(employee.id)}</span>
@@ -206,7 +216,11 @@ export function EmployeeDetail() {
           </span>
           <div>
             <p className="text-xl font-bold text-white">{employee.name}</p>
-            {employee.role && <p className="text-sm font-medium text-app-accent">{employee.role}</p>}
+            {(employee.role || employee.level) && (
+              <p className="text-sm font-medium text-app-accent">
+                {employee.role}{employee.role && employee.level ? " • " : ""}{employee.level}
+              </p>
+            )}
           </div>
         </div>
 
