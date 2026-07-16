@@ -1,7 +1,8 @@
-import { useState } from "react";
-import { BellRing, Clock, Download, Info, KeyRound, Wrench } from "lucide-react";
+import { useEffect, useState } from "react";
+import { BellRing, Clock, Download, Info, KeyRound, Lock, Pencil, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageContainer } from "@/components/Layout";
 import { Card, IconTile, SectionHeader, Separator, inputClass } from "@/components/shared";
 import { useData } from "@/lib/store";
@@ -12,8 +13,10 @@ import { generateMovementsReport, generateRentalReport, generateToolsReport } fr
 
 export default function Settings() {
   const { db, updateSettings } = useData();
-  const { profile, isAdmin } = useAuth();
+  const { profile, isAdmin, updateOwnName, updatePassword } = useAuth();
   const [exporting, setExporting] = useState(false);
+  const [editNameOpen, setEditNameOpen] = useState(false);
+  const [editPasswordOpen, setEditPasswordOpen] = useState(false);
 
   const scheduledCount = db.tools.filter((t) => t.ownership === "rented" && t.rentalEndDate).length;
 
@@ -105,16 +108,35 @@ export default function Settings() {
       <div className="flex flex-col gap-5 pb-6">
         {/* User info */}
         {profile && (
-          <Card className="flex items-center gap-3.5">
-            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-app-accent/20 text-lg font-bold text-app-accent">
-              {profile.name?.charAt(0).toUpperCase() ?? "?"}
-            </span>
-            <div className="flex-1">
-              <p className="text-base font-bold text-white">{profile.name || "Sem nome"}</p>
-              <p className="text-xs text-app-muted">{profile.email}</p>
-              <p className="text-[11px] font-semibold text-app-accent">
-                {profile.role === "admin" ? "Administrador" : "Usuário Padrão"}
-              </p>
+          <Card className="flex flex-col gap-3.5">
+            <div className="flex items-center gap-3.5">
+              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-app-accent/20 text-lg font-bold text-app-accent">
+                {profile.name?.charAt(0).toUpperCase() ?? "?"}
+              </span>
+              <div className="flex-1">
+                <p className="text-base font-bold text-white">{profile.name || "Sem nome"}</p>
+                <p className="text-xs text-app-muted">{profile.email}</p>
+                <p className="text-[11px] font-semibold text-app-accent">
+                  {profile.role === "admin" ? "Administrador" : "Usuário Padrão"}
+                </p>
+              </div>
+            </div>
+            <Separator />
+            <div className="flex gap-2.5">
+              <button
+                type="button"
+                onClick={() => setEditNameOpen(true)}
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl border-[0.5px] border-app-separator bg-app-elevated py-2.5 text-sm font-semibold text-white hover:bg-white/5"
+              >
+                <Pencil size={14} /> Editar Nome
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditPasswordOpen(true)}
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl border-[0.5px] border-app-separator bg-app-elevated py-2.5 text-sm font-semibold text-white hover:bg-white/5"
+              >
+                <Lock size={14} /> Alterar Senha
+              </button>
             </div>
           </Card>
         )}
@@ -229,6 +251,187 @@ export default function Settings() {
           </Card>
         </div>
       </div>
+
+      <EditNameDialog
+        open={editNameOpen}
+        onClose={() => setEditNameOpen(false)}
+        currentName={profile?.name ?? ""}
+        onSave={async (name) => {
+          await updateOwnName(name);
+          toast.success("Nome atualizado");
+          setEditNameOpen(false);
+        }}
+      />
+      <EditPasswordDialog
+        open={editPasswordOpen}
+        onClose={() => setEditPasswordOpen(false)}
+        onSave={async (pw) => {
+          await updatePassword(pw);
+          toast.success("Senha alterada com sucesso");
+          setEditPasswordOpen(false);
+        }}
+      />
     </PageContainer>
+  );
+}
+
+function EditNameDialog({
+  open,
+  onClose,
+  currentName,
+  onSave,
+}: {
+  open: boolean;
+  onClose: () => void;
+  currentName: string;
+  onSave: (name: string) => Promise<void>;
+}) {
+  const [name, setName] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (open) setName(currentName);
+  }, [open, currentName]);
+
+  const handleSave = async () => {
+    if (!name.trim()) {
+      toast.error("Informe seu nome");
+      return;
+    }
+    setLoading(true);
+    try {
+      await onSave(name.trim());
+    } catch {
+      toast.error("Falha ao atualizar nome");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md border-app-separator bg-app-card">
+        <DialogHeader>
+          <DialogTitle className="text-white">Editar Nome</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-4">
+          <label className="flex flex-col gap-1.5">
+            <span className="text-xs font-semibold uppercase tracking-wide text-app-muted">Nome</span>
+            <input
+              className={inputClass}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Seu nome"
+            />
+          </label>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 rounded-xl border-[0.5px] border-app-separator bg-app-elevated py-3 text-sm font-semibold text-app-muted hover:text-white"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleSave()}
+              disabled={loading}
+              className="flex-1 rounded-xl bg-app-accent py-3 text-sm font-bold text-app-bg hover:opacity-90 disabled:opacity-50"
+            >
+              {loading ? "Salvando..." : "Salvar"}
+            </button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EditPasswordDialog({
+  open,
+  onClose,
+  onSave,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSave: (password: string) => Promise<void>;
+}) {
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setPassword("");
+      setConfirm("");
+    }
+  }, [open]);
+
+  const handleSave = async () => {
+    if (password.length < 6) {
+      toast.error("A senha deve ter no mínimo 6 caracteres");
+      return;
+    }
+    if (password !== confirm) {
+      toast.error("As senhas não coincidem");
+      return;
+    }
+    setLoading(true);
+    try {
+      await onSave(password);
+    } catch {
+      toast.error("Falha ao alterar senha");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md border-app-separator bg-app-card">
+        <DialogHeader>
+          <DialogTitle className="text-white">Alterar Senha</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-4">
+          <label className="flex flex-col gap-1.5">
+            <span className="text-xs font-semibold uppercase tracking-wide text-app-muted">Nova Senha</span>
+            <input
+              type="password"
+              className={inputClass}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Mínimo 6 caracteres"
+            />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className="text-xs font-semibold uppercase tracking-wide text-app-muted">Confirmar Senha</span>
+            <input
+              type="password"
+              className={inputClass}
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              placeholder="Repita a nova senha"
+            />
+          </label>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 rounded-xl border-[0.5px] border-app-separator bg-app-elevated py-3 text-sm font-semibold text-app-muted hover:text-white"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleSave()}
+              disabled={loading}
+              className="flex-1 rounded-xl bg-app-accent py-3 text-sm font-bold text-app-bg hover:opacity-90 disabled:opacity-50"
+            >
+              {loading ? "Salvando..." : "Alterar"}
+            </button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

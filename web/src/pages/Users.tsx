@@ -23,10 +23,12 @@ import { formatShortDate } from "@/lib/format";
 
 function UserEditDialog({ user, open, onClose }: { user: UserProfile | null; open: boolean; onClose: () => void }) {
   const { saveUser, db } = useData();
-  const { profile: currentUser } = useAuth();
+  const { profile: currentUser, refreshProfile } = useAuth();
   const [name, setName] = useState("");
   const [role, setRole] = useState<UserRole>("user");
   const [active, setActive] = useState(true);
+
+  const isSelf = user?.id === currentUser?.id;
 
   useEffect(() => {
     if (!open || !user) return;
@@ -61,6 +63,7 @@ function UserEditDialog({ user, open, onClose }: { user: UserProfile | null; ope
     }
 
     await saveUser({ ...user, name, role, active }, user.role);
+    if (isSelf) await refreshProfile();
     toast.success("Usuário atualizado");
     onClose();
   };
@@ -82,15 +85,17 @@ function UserEditDialog({ user, open, onClose }: { user: UserProfile | null; ope
           </label>
           <label className="flex flex-col gap-1.5">
             <span className="text-xs font-semibold uppercase tracking-wide text-app-muted">Nível de Acesso</span>
-            <select className={inputClass} value={role} onChange={(e) => setRole(e.target.value as UserRole)}>
+            <select className={inputClass} value={role} onChange={(e) => setRole(e.target.value as UserRole)} disabled={isSelf}>
               <option value="user">Usuário Padrão</option>
               <option value="admin">Administrador</option>
             </select>
+            {isSelf && <span className="text-[11px] text-app-muted">Você não pode alterar seu próprio nível de acesso</span>}
           </label>
-          <label className="flex items-center gap-3">
-            <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="h-5 w-5 accent-app-accent" />
+          <label className={`flex items-center gap-3 ${isSelf ? "opacity-50" : ""}`}>
+            <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} disabled={isSelf} className="h-5 w-5 accent-app-accent" />
             <span className="text-sm font-medium text-white">Conta ativa</span>
           </label>
+          {isSelf && <p className="text-[11px] text-app-muted">Você não pode desativar sua própria conta</p>}
           <div className="flex gap-3 pt-1">
             <button type="button" onClick={onClose} className="flex-1 rounded-xl border-[0.5px] border-app-separator bg-app-elevated py-3 text-sm font-semibold text-app-muted hover:text-white">
               Cancelar
@@ -157,15 +162,14 @@ export default function Users() {
                     <span className="text-[10px] font-semibold text-status-red">Inativo</span>
                   )}
                 </div>
-                {user.id !== currentUser?.id && (
-                  <button
-                    type="button"
-                    onClick={() => setEditUser(user)}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-app-accent/15 text-app-accent hover:bg-app-accent/25"
-                  >
-                    <UserCog size={16} />
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => setEditUser(user)}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-app-accent/15 text-app-accent hover:bg-app-accent/25"
+                  title={user.id === currentUser?.id ? "Editar meu perfil" : "Editar usuário"}
+                >
+                  <UserCog size={16} />
+                </button>
               </Card>
             ))}
           </div>

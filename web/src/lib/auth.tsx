@@ -14,6 +14,8 @@ interface AuthState {
   signUp: (email: string, password: string, name: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  updateOwnName: (name: string) => Promise<void>;
+  updatePassword: (newPassword: string) => Promise<void>;
 }
 
 function useAuthHook() {
@@ -105,6 +107,21 @@ function useAuthHook() {
     setProfile(null);
   }, []);
 
+  const updateOwnName = useCallback(async (name: string) => {
+    if (!user) throw new Error("Not authenticated");
+    const { error } = await supabase
+      .from("profiles")
+      .update({ name })
+      .eq("id", user.id);
+    if (error) throw error;
+    await fetchProfile(user.id);
+  }, [user, fetchProfile]);
+
+  const updatePassword = useCallback(async (newPassword: string) => {
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) throw error;
+  }, []);
+
   return {
     session,
     user,
@@ -115,6 +132,8 @@ function useAuthHook() {
     signUp,
     signOut,
     refreshProfile,
+    updateOwnName,
+    updatePassword,
   };
 }
 
