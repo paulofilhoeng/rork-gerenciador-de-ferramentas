@@ -122,6 +122,14 @@ export default function Login() {
             ? "Novo colaborador? Toque em Cadastrar para criar sua conta."
             : "Já tem conta? Toque em Entrar para acessar."}
         </p>
+
+        {mode === "signup" && (
+          <div className="rounded-xl border border-app-accent/30 bg-app-accent/10 px-4 py-3 text-center">
+            <p className="text-xs leading-relaxed text-app-accent/90">
+              O primeiro usuário cadastrado se torna <strong>Administrador</strong> automaticamente, com acesso total ao sistema.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

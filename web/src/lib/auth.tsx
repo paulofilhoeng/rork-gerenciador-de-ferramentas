@@ -82,17 +82,21 @@ function useAuthHook() {
   }, []);
 
   const signUp = useCallback(async (email: string, password: string, name: string) => {
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { name } },
+    });
     if (error) throw error;
 
+    // The database trigger `handle_new_user` automatically inserts the profile
+    // with role='admin' for the very first user, and role='user' thereafter.
+    // We only need to patch the name if the trigger used the email prefix as fallback.
     if (data.user) {
-      await supabase.from("profiles").upsert({
-        id: data.user.id,
-        email,
-        name,
-        role: "user",
-        active: true,
-      });
+      await supabase
+        .from("profiles")
+        .update({ name })
+        .eq("id", data.user.id);
     }
   }, []);
 
