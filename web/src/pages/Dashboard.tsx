@@ -10,7 +10,9 @@ import {
   Clock,
   Download,
   Hammer,
+  HardHat,
   KeyRound,
+  Link2,
   PlayCircle,
   Users,
   Wrench,
@@ -28,7 +30,7 @@ import { Card, COLOR_TEXT, IconTile, MOVEMENT_ICON, SectionHeader, Separator } f
 import { useData } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import type { StatusColor, Tool } from "@/lib/types";
-import { MOVEMENT_COLOR, MOVEMENT_LABEL, auditDaysRemaining, daysRemaining, effectiveStatus, isAuditDue, isRentalEndingSoon, totalRentalCost } from "@/lib/types";
+import { MOVEMENT_COLOR, MOVEMENT_LABEL, TOOL_STATUS_COLOR, TOOL_STATUS_LABEL, auditDaysRemaining, daysRemaining, effectiveStatus, isAuditDue, isRentalEndingSoon, totalRentalCost } from "@/lib/types";
 import { formatCurrency, formatRelativeTime } from "@/lib/format";
 import { generateMovementsReport, generateRentalReport, generateToolsReport } from "@/lib/reports";
 import { cn } from "@/lib/utils";
@@ -82,10 +84,27 @@ function AlertCard({
 
 export default function Dashboard() {
   const { db } = useData();
-  const { profile } = useAuth();
+  const { profile, isAdmin } = useAuth();
   const [exporting, setExporting] = useState(false);
 
   const companyName = (id: string | null) => (id ? db.companies.find((c) => c.id === id)?.name ?? "" : "");
+
+  // My panel: linked employee, site, tools under my responsibility
+  const myPanel = useMemo(() => {
+    const employee = db.employees.find((e) => e.userId === profile?.id) ?? null;
+    if (!employee) return null;
+    const myTools = db.tools.filter((t) => t.currentEmployeeId === employee.id);
+    const mySites = db.sites.filter((s) =>
+      myTools.some((t) => t.currentSiteId === s.id),
+    );
+    const myToolsByStatus = {
+      available: myTools.filter((t) => effectiveStatus(t) === "available").length,
+      inUse: myTools.filter((t) => effectiveStatus(t) === "inUse").length,
+      maintenance: myTools.filter((t) => effectiveStatus(t) === "maintenance").length,
+      overdue: myTools.filter((t) => effectiveStatus(t) === "overdue").length,
+    };
+    return { employee, myTools, mySites, myToolsByStatus };
+  }, [db.employees, db.tools, db.sites, profile?.id]);
 
   const stats = useMemo(() => {
     const ownTools = db.tools.filter((t) => t.ownership === "own");
@@ -154,6 +173,78 @@ export default function Dashboard() {
             <p className="text-xs text-app-muted/70">Olá, {profile.name || profile.email}</p>
           )}
         </div>
+
+        {/* My Panel */}
+        {myPanel && (
+          <div className="flex flex-col gap-3">
+            <SectionHeader title={isAdmin ? "Meu Painel" : "Minha Responsabilidade"} />
+            <Card className="flex flex-col gap-3 border-app-accent/25 bg-app-accent/[0.04] p-4">
+              {/* Employee identity */}
+              <div className="flex items-center gap-3">
+                <IconTile icon={HardHat} color="accent" size={40} iconSize={20} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-base font-bold text-white">{myPanel.employee.name}</p>
+                  <p className="truncate text-xs text-app-muted">
+                    {myPanel.employee.role}{myPanel.employee.role && myPanel.employee.level ? " • " : ""}{myPanel.employee.level}
+                  </p>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Sites I'm on */}
+              <div className="flex flex-col gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-app-muted">Obra(s) Vinculada(s)</p>
+                {myPanel.mySites.length > 0 ? (
+                  myPanel.mySites.map((site) => (
+                    <Link key={site.id} to={`/obras/${site.id}`} className="flex items-center gap-2.5">
+                      <Hammer size={15} className="shrink-0 text-status-green" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-white">{site.name}</p>
+                        <p className="truncate text-[11px] text-app-muted">{site.address || "Sem endereço"}</p>
+                      </div>
+                      <ChevronRight size={14} className="shrink-0 text-app-muted/50" />
+                    </Link>
+                  ))
+                ) : (
+                  <p className="flex items-center gap-2 text-sm text-app-muted/60">
+                    <Link2 size={14} /> Sem obra vinculada no momento
+                  </p>
+                )}
+              </div>
+
+              <Separator />
+
+              {/* Tools under my responsibility */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Wrench size={16} className="text-app-accent" />
+                  <span className="text-sm font-semibold text-white">Ferramentas sob minha responsabilidade</span>
+                </div>
+                <span className="text-2xl font-extrabold text-app-accent">{myPanel.myTools.length}</span>
+              </div>
+
+              {myPanel.myTools.length > 0 && (
+                <div className="grid grid-cols-4 gap-2">
+                  {(["available", "inUse", "maintenance", "overdue"] as const).map((st) => (
+                    <div key={st} className="flex flex-col items-center rounded-lg bg-app-elevated py-2">
+                      <span className={cn("text-lg font-bold", COLOR_TEXT[TOOL_STATUS_COLOR[st]])}>
+                        {myPanel.myToolsByStatus[st]}
+                      </span>
+                      <span className="text-[10px] font-medium text-app-muted">{TOOL_STATUS_LABEL[st]}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {myPanel.myTools.length > 0 && (
+                <Link to="/ferramentas" className="text-center text-xs font-semibold text-app-accent hover:opacity-80">
+                  Ver minhas ferramentas →
+                </Link>
+              )}
+            </Card>
+          </div>
+        )}
 
         {/* Stats grid */}
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
