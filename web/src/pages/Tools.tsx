@@ -1,0 +1,166 @@
+import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { Calendar, Hammer, User, Wrench } from "lucide-react";
+import { PageContainer } from "@/components/Layout";
+import {
+  Card,
+  EmptyState,
+  Fab,
+  FilterChip,
+  IconTile,
+  OWNERSHIP_ICON,
+  SearchInput,
+  StatusBadge,
+  TOOL_STATUS_ICON,
+} from "@/components/shared";
+import { ToolEditDialog } from "@/components/ToolEditDialog";
+import { useData } from "@/lib/store";
+import type { Tool, ToolOwnership, ToolStatus } from "@/lib/types";
+import {
+  OWNERSHIP_LABEL,
+  TOOL_STATUS_COLOR,
+  TOOL_STATUS_LABEL,
+  daysRemaining,
+  effectiveStatus,
+  totalRentalCost,
+} from "@/lib/types";
+import { formatCurrency } from "@/lib/format";
+import { cn } from "@/lib/utils";
+
+function ToolRow({ tool }: { tool: Tool }) {
+  const { db } = useData();
+  const status = effectiveStatus(tool);
+  const days = daysRemaining(tool);
+  const site = tool.currentSiteId ? db.sites.find((s) => s.id === tool.currentSiteId) : null;
+  const employee = tool.currentEmployeeId ? db.employees.find((e) => e.id === tool.currentEmployeeId) : null;
+
+  return (
+    <Link to={`/ferramentas/${tool.id}`}>
+      <Card className="flex flex-col gap-2 transition-colors hover:border-app-accent/40">
+        <div className="flex items-start gap-3">
+          <IconTile icon={OWNERSHIP_ICON[tool.ownership]} color={tool.ownership === "rented" ? "appOrange" : "accent"} />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-base font-semibold text-white">{tool.name}</p>
+            {tool.brand && (
+              <p className="truncate text-xs text-app-muted">
+                {tool.brand} · {tool.model}
+              </p>
+            )}
+          </div>
+          <StatusBadge label={TOOL_STATUS_LABEL[status]} color={TOOL_STATUS_COLOR[status]} icon={TOOL_STATUS_ICON[status]} />
+        </div>
+
+        <div className="flex items-center justify-between gap-2 text-[11px] font-medium text-app-muted">
+          <span className="flex min-w-0 items-center gap-1.5">
+            <Hammer size={11} className="shrink-0" />
+            <span className="truncate">{site?.name ?? "Sem obra"}</span>
+          </span>
+          <span className="flex min-w-0 items-center gap-1.5">
+            <User size={11} className="shrink-0" />
+            <span className="truncate">{employee?.name ?? (tool.baseStatus !== "maintenance" ? "Sem responsável" : "—")}</span>
+          </span>
+        </div>
+
+        {tool.ownership === "rented" && days !== null && (
+          <div
+            className={cn(
+              "flex items-center gap-1.5 text-[11px] font-semibold",
+              days < 0 ? "text-status-red" : days <= 3 ? "text-status-orange" : "text-app-muted",
+            )}
+          >
+            <Calendar size={10} />
+            {days < 0
+              ? `Atrasado ${Math.abs(days)} dia(s) · ${formatCurrency(totalRentalCost(tool))}`
+              : `Faltam ${days} dia(s) · ${formatCurrency(totalRentalCost(tool))}`}
+          </div>
+        )}
+      </Card>
+    </Link>
+  );
+}
+
+export default function Tools() {
+  const { db } = useData();
+  const [search, setSearch] = useState("");
+  const [filterOwnership, setFilterOwnership] = useState<ToolOwnership | null>(null);
+  const [filterStatus, setFilterStatus] = useState<ToolStatus | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return [...db.tools]
+      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))
+      .filter((tool) => {
+        const matchesSearch =
+          q === "" ||
+          tool.name.toLowerCase().includes(q) ||
+          tool.brand.toLowerCase().includes(q) ||
+          tool.serialNumber.toLowerCase().includes(q);
+        const matchesOwnership = filterOwnership === null || tool.ownership === filterOwnership;
+        const matchesStatus = filterStatus === null || effectiveStatus(tool) === filterStatus;
+        return matchesSearch && matchesOwnership && matchesStatus;
+      });
+  }, [db.tools, search, filterOwnership, filterStatus]);
+
+  return (
+    <PageContainer title="Ferramentas">
+      <div className="flex flex-col gap-4 pb-6">
+        <SearchInput value={search} onChange={setSearch} placeholder="Nome, marca ou série" />
+
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          <FilterChip
+            label="Todas"
+            isActive={filterOwnership === null && filterStatus === null}
+            onClick={() => {
+              setFilterOwnership(null);
+              setFilterStatus(null);
+            }}
+          />
+          <FilterChip
+            label={OWNERSHIP_LABEL.own + "s"}
+            isActive={filterOwnership === "own"}
+            onClick={() => setFilterOwnership(filterOwnership === "own" ? null : "own")}
+          />
+          <FilterChip
+            label={OWNERSHIP_LABEL.rented + "s"}
+            isActive={filterOwnership === "rented"}
+            onClick={() => setFilterOwnership(filterOwnership === "rented" ? null : "rented")}
+          />
+          <FilterChip
+            label="Em Uso"
+            isActive={filterStatus === "inUse"}
+            onClick={() => setFilterStatus(filterStatus === "inUse" ? null : "inUse")}
+          />
+          <FilterChip
+            label="Disponíveis"
+            isActive={filterStatus === "available"}
+            onClick={() => setFilterStatus(filterStatus === "available" ? null : "available")}
+          />
+          <FilterChip
+            label="Atrasadas"
+            isActive={filterStatus === "overdue"}
+            onClick={() => setFilterStatus(filterStatus === "overdue" ? null : "overdue")}
+          />
+          <FilterChip
+            label="Manutenção"
+            isActive={filterStatus === "maintenance"}
+            onClick={() => setFilterStatus(filterStatus === "maintenance" ? null : "maintenance")}
+          />
+        </div>
+
+        {filtered.length === 0 ? (
+          <EmptyState icon={Wrench} title="Nenhuma ferramenta" subtitle="Toque em + para adicionar a primeira ferramenta" />
+        ) : (
+          <div className="flex flex-col gap-2.5">
+            {filtered.map((tool) => (
+              <ToolRow key={tool.id} tool={tool} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <Fab label="Nova ferramenta" onClick={() => setShowAdd(true)} />
+      <ToolEditDialog tool={null} open={showAdd} onClose={() => setShowAdd(false)} />
+    </PageContainer>
+  );
+}
