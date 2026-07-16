@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Mail, Phone, Trash2, UserRound, Users, Wrench } from "lucide-react";
+import { ArrowLeft, Link2, Mail, Phone, Trash2, UserRound, Users, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -34,12 +34,13 @@ import { TOOL_STATUS_COLOR, TOOL_STATUS_LABEL, effectiveStatus, newId } from "@/
 // MARK: - Edit dialog
 
 function EmployeeEditDialog({ employee, open, onClose }: { employee: Employee | null; open: boolean; onClose: () => void }) {
-  const { saveEmployee } = useData();
+  const { saveEmployee, db } = useData();
   const isNew = employee === null;
 
   const [name, setName] = useState("");
   const [role, setRole] = useState("");
   const [level, setLevel] = useState("");
+  const [userId, setUserId] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [showError, setShowError] = useState(false);
@@ -49,6 +50,7 @@ function EmployeeEditDialog({ employee, open, onClose }: { employee: Employee | 
     setName(employee?.name ?? "");
     setRole(employee?.role ?? "");
     setLevel(employee?.level ?? "");
+    setUserId(employee?.userId ?? "");
     setPhone(employee?.phone ?? "");
     setEmail(employee?.email ?? "");
     setShowError(false);
@@ -64,6 +66,7 @@ function EmployeeEditDialog({ employee, open, onClose }: { employee: Employee | 
       name: name.trim(),
       role,
       level,
+      userId: userId || null,
       phone,
       email,
       createdAt: employee?.createdAt ?? new Date().toISOString(),
@@ -87,6 +90,28 @@ function EmployeeEditDialog({ employee, open, onClose }: { employee: Employee | 
           </Field>
           <Field label="Alçada">
             <input className={inputClass} value={level} onChange={(e) => setLevel(e.target.value)} placeholder="Ex: Operário, Encarregado, Engenheiro" />
+          </Field>
+          <Field label="Vínculo com Usuário do Sistema">
+            <select
+              className={inputClass}
+              value={userId}
+              onChange={(e) => setUserId(e.target.value)}
+            >
+              <option value="">Nenhum vínculo</option>
+              {db.users
+                .filter((u) => u.active)
+                .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))
+                .map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name} ({u.email}) — {u.role === "admin" ? "Administrador" : "Padrão"}
+                  </option>
+                ))}
+            </select>
+            {userId && (
+              <p className="mt-1.5 text-[11px] text-app-muted">
+                O nível de acesso deste funcionário no sistema será herdado do perfil vinculado.
+              </p>
+            )}
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Telefone">
@@ -149,6 +174,11 @@ export default function Employees() {
                       </p>
                     )}
                   </div>
+                  {employee.userId && (
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-app-accent/15 text-app-accent" title="Vínculo com usuário">
+                      <Link2 size={14} />
+                    </span>
+                  )}
                   <div className="flex flex-col items-end">
                     <span className="text-lg font-bold text-app-accent">{toolCount(employee.id)}</span>
                     <span className="text-[10px] text-app-muted">ferramenta(s)</span>
@@ -175,6 +205,10 @@ export function EmployeeDetail() {
   const [showDelete, setShowDelete] = useState(false);
 
   const employee = db.employees.find((e) => e.id === id);
+  const linkedUser = useMemo(
+    () => (employee?.userId ? db.users.find((u) => u.id === employee.userId) ?? null : null),
+    [db.users, employee?.userId],
+  );
   const tools = useMemo(
     () => db.tools.filter((t) => t.currentEmployeeId === id).sort((a, b) => a.name.localeCompare(b.name, "pt-BR")),
     [db.tools, id],
@@ -219,6 +253,11 @@ export function EmployeeDetail() {
             {(employee.role || employee.level) && (
               <p className="text-sm font-medium text-app-accent">
                 {employee.role}{employee.role && employee.level ? " • " : ""}{employee.level}
+              </p>
+            )}
+            {linkedUser && (
+              <p className="text-xs text-app-muted">
+                Vínculo: <span className="font-medium text-white">{linkedUser.name}</span> ({linkedUser.email}) — {linkedUser.role === "admin" ? "Administrador" : "Padrão"}
               </p>
             )}
           </div>

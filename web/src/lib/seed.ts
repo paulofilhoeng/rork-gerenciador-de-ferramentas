@@ -84,11 +84,11 @@ export function buildSeedData(): DB {
     createdAt: now,
   };
 
-  const joao = { id: newId(), name: "João Pereira", role: "Mestre de Obras", level: "Líder de Equipe", phone: "(11) 98888-1111", email: "joao@ferragest.com.br", createdAt: now };
-  const pedro = { id: newId(), name: "Pedro Alves", role: "Pedreiro", level: "Operário", phone: "(11) 98888-2222", email: "pedro@ferragest.com.br", createdAt: now };
-  const maria = { id: newId(), name: "Maria Fernandes", role: "Encarregada", level: "Supervisora", phone: "(11) 98888-3333", email: "maria@ferragest.com.br", createdAt: now };
-  const jose = { id: newId(), name: "José Carlos", role: "Eletricista", level: "Especialista", phone: "(11) 98888-4444", email: "jose@ferragest.com.br", createdAt: now };
-  const lucas = { id: newId(), name: "Lucas Oliveira", role: "Ajudante", level: "Operário", phone: "(11) 98888-5555", email: "lucas@ferragest.com.br", createdAt: now };
+  const joao = { id: newId(), name: "João Pereira", role: "Mestre de Obras", level: "Líder de Equipe", userId: null as string | null, phone: "(11) 98888-1111", email: "joao@ferragest.com.br", createdAt: now };
+  const pedro = { id: newId(), name: "Pedro Alves", role: "Pedreiro", level: "Operário", userId: null as string | null, phone: "(11) 98888-2222", email: "pedro@ferragest.com.br", createdAt: now };
+  const maria = { id: newId(), name: "Maria Fernandes", role: "Encarregada", level: "Supervisora", userId: null as string | null, phone: "(11) 98888-3333", email: "maria@ferragest.com.br", createdAt: now };
+  const jose = { id: newId(), name: "José Carlos", role: "Eletricista", level: "Especialista", userId: null as string | null, phone: "(11) 98888-4444", email: "jose@ferragest.com.br", createdAt: now };
+  const lucas = { id: newId(), name: "Lucas Oliveira", role: "Ajudante", level: "Operário", userId: null as string | null, phone: "(11) 98888-5555", email: "lucas@ferragest.com.br", createdAt: now };
 
   const base = {
     notes: "",

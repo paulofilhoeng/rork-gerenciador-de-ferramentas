@@ -175,6 +175,7 @@ export type Database = {
           name: string
           phone: string | null
           role: string | null
+          user_id: string | null
         }
         Insert: {
           created_at?: string | null
@@ -184,6 +185,7 @@ export type Database = {
           name: string
           phone?: string | null
           role?: string | null
+          user_id?: string | null
         }
         Update: {
           created_at?: string | null
@@ -193,8 +195,17 @@ export type Database = {
           name?: string
           phone?: string | null
           role?: string | null
+          user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "employees_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       maintenance_records: {
         Row: {

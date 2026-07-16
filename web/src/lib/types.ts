@@ -219,6 +219,7 @@ export interface Employee {
   name: string;
   role: string;
   level: string;
+  userId: string | null;
   phone: string;
   email: string;
   createdAt: string;

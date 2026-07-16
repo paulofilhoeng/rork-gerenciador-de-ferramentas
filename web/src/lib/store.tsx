@@ -83,6 +83,7 @@ function mapEmployee(row: Record<string, unknown>): Employee {
     name: row.name as string,
     role: (row.role as string) ?? "",
     level: (row.level as string) ?? "",
+    userId: row.user_id ? (row.user_id as string) : null,
     phone: (row.phone as string) ?? "",
     email: (row.email as string) ?? "",
     createdAt: (row.created_at as string) ?? new Date().toISOString(),
@@ -644,6 +645,7 @@ function useDataHook() {
         name: employee.name,
         role: employee.role,
         level: employee.level,
+        user_id: employee.userId,
         phone: employee.phone,
         email: employee.email,
       });
