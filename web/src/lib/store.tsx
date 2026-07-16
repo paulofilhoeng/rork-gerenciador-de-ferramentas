@@ -241,6 +241,7 @@ interface DataContextValue {
   startMaintenance: (toolId: string) => Promise<void>;
   returnFromMaintenance: (toolId: string, repairCost: number, invoiceNumber: string, invoiceAttachment: ToolAttachment | null) => Promise<void>;
   saveUser: (user: UserProfile, previousRole?: UserRole) => Promise<void>;
+  linkEmployeeToUser: (userId: string, employeeId: string | null) => Promise<void>;
   deleteUser: (id: string) => Promise<void>;
   updateSettings: (partial: Partial<AppSettings>) => Promise<void>;
   saveMovementType: (mt: MovementTypeEntity) => Promise<void>;
@@ -894,6 +895,24 @@ function useDataHook() {
     [logActivity],
   );
 
+  const linkEmployeeToUser = useCallback(
+    async (userId: string, employeeId: string | null) => {
+      // Clear any previous link to this user
+      await supabase.from("employees").update({ user_id: null }).eq("user_id", userId);
+      // Set new link (or leave null if employeeId is null)
+      if (employeeId) {
+        const { error } = await supabase.from("employees").update({ user_id: userId }).eq("id", employeeId);
+        if (error) {
+          toast.error("Falha ao vincular funcionário");
+          return;
+        }
+      }
+      const emp = db.employees.find((e) => e.id === employeeId);
+      await logActivity("edit", "user", userId, undefined, { linkedEmployee: employeeId ? emp?.name : null });
+    },
+    [db.employees, logActivity],
+  );
+
   const deleteUser = useCallback(
     async (id: string) => {
       const u = db.users.find((x) => x.id === id);
@@ -1014,6 +1033,7 @@ function useDataHook() {
     startMaintenance,
     returnFromMaintenance,
     saveUser,
+    linkEmployeeToUser,
     deleteUser,
     updateSettings,
     saveMovementType,

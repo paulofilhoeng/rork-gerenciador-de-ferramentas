@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Shield, Trash2, UserCog, UserRound, Users as UsersIcon } from "lucide-react";
+import { Link2, Shield, Trash2, UserCog, UserRound, Users as UsersIcon } from "lucide-react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -22,11 +22,12 @@ import { USER_ROLE_LABEL } from "@/lib/types";
 import { formatShortDate } from "@/lib/format";
 
 function UserEditDialog({ user, open, onClose }: { user: UserProfile | null; open: boolean; onClose: () => void }) {
-  const { saveUser, db } = useData();
+  const { saveUser, db, linkEmployeeToUser } = useData();
   const { profile: currentUser, refreshProfile } = useAuth();
   const [name, setName] = useState("");
   const [role, setRole] = useState<UserRole>("user");
   const [active, setActive] = useState(true);
+  const [linkedEmployeeId, setLinkedEmployeeId] = useState<string>("");
 
   const isSelf = user?.id === currentUser?.id;
 
@@ -35,7 +36,9 @@ function UserEditDialog({ user, open, onClose }: { user: UserProfile | null; ope
     setName(user.name);
     setRole(user.role);
     setActive(user.active);
-  }, [open, user]);
+    const linked = db.employees.find((e) => e.userId === user.id);
+    setLinkedEmployeeId(linked?.id ?? "");
+  }, [open, user, db.employees]);
 
   const save = async () => {
     if (!user) return;
@@ -63,6 +66,10 @@ function UserEditDialog({ user, open, onClose }: { user: UserProfile | null; ope
     }
 
     await saveUser({ ...user, name, role, active }, user.role);
+    const currentLinked = db.employees.find((e) => e.userId === user.id);
+    if ((currentLinked?.id ?? "") !== linkedEmployeeId) {
+      await linkEmployeeToUser(user.id, linkedEmployeeId || null);
+    }
     if (isSelf) await refreshProfile();
     toast.success("Usuário atualizado");
     onClose();
@@ -96,6 +103,25 @@ function UserEditDialog({ user, open, onClose }: { user: UserProfile | null; ope
             <span className="text-sm font-medium text-white">Conta ativa</span>
           </label>
           {isSelf && <p className="text-[11px] text-app-muted">Você não pode desativar sua própria conta</p>}
+          <label className="flex flex-col gap-1.5">
+            <span className="text-xs font-semibold uppercase tracking-wide text-app-muted">Vínculo com Funcionário</span>
+            <select
+              className={inputClass}
+              value={linkedEmployeeId}
+              onChange={(e) => setLinkedEmployeeId(e.target.value)}
+            >
+              <option value="">Nenhum vínculo</option>
+              {db.employees
+                .filter((e) => !e.userId || e.userId === user?.id)
+                .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))
+                .map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.name}{emp.role ? ` — ${emp.role}` : ""}
+                  </option>
+                ))}
+            </select>
+            <span className="text-[11px] text-app-muted">Associe este usuário a um funcionário para vincular o nível de acesso</span>
+          </label>
           <div className="flex gap-3 pt-1">
             <button type="button" onClick={onClose} className="flex-1 rounded-xl border-[0.5px] border-app-separator bg-app-elevated py-3 text-sm font-semibold text-app-muted hover:text-white">
               Cancelar
@@ -150,7 +176,16 @@ export default function Users() {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-base font-semibold text-white">{user.name || "Sem nome"}</p>
                   <p className="truncate text-xs text-app-muted">{user.email}</p>
-                  <p className="text-[10px] text-app-muted/60">Cadastrado em {formatShortDate(user.createdAt)}</p>
+                  {(() => {
+                    const linkedEmp = db.employees.find((e) => e.userId === user.id);
+                    return linkedEmp ? (
+                      <p className="flex items-center gap-1 text-[10px] text-app-accent/80">
+                        <Link2 size={10} /> {linkedEmp.name}{linkedEmp.role ? ` — ${linkedEmp.role}` : ""}
+                      </p>
+                    ) : (
+                      <p className="text-[10px] text-app-muted/60">Cadastrado em {formatShortDate(user.createdAt)}</p>
+                    );
+                  })()}
                 </div>
                 <div className="flex flex-col items-end gap-1.5">
                   <StatusBadge
