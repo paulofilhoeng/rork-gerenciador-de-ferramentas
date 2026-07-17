@@ -34,6 +34,7 @@ export default function BulkImport() {
   const [previewRows, setPreviewRows] = useState<ValidationRow[]>([]);
   const [importing, setImporting] = useState(false);
   const [summary, setSummary] = useState<ImportSummary | null>(null);
+  const [backendError, setBackendError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
 
   const validRows = previewRows.filter((r) => r.status === "ok");
@@ -65,6 +66,7 @@ export default function BulkImport() {
 
       setSelectedFile(file);
       setSummary(null);
+      setBackendError(null);
       setPreviewRows([]);
 
       try {
@@ -117,7 +119,7 @@ export default function BulkImport() {
         .map((r) => r.tool)
         .filter((t): t is Tool => t !== null && t !== undefined);
 
-      const importedCount = await bulkInsertTools(toolsToImport);
+      const { count: importedCount, error: importError } = await bulkInsertTools(toolsToImport);
 
       const newSummary: ImportSummary = {
         totalProcessed: previewRows.length,
@@ -125,20 +127,26 @@ export default function BulkImport() {
         failed: previewRows.length - importedCount,
         errors: errorRows.map((r) => ({ rowNumber: r.rowNumber, message: r.error ?? "Erro desconhecido" })),
         importedTools: toolsToImport.slice(0, importedCount),
+        backendError: importError ?? null,
       };
       setSummary(newSummary);
+      setBackendError(importError ?? null);
       setPreviewRows([]);
       setSelectedFile(null);
 
       if (importedCount > 0) {
         toast.success(`${importedCount} ferramenta(s) importada(s) com sucesso`);
       }
-      if (errorRows.length > 0) {
+      if (importError) {
+        toast.error(importError);
+      } else if (errorRows.length > 0) {
         toast.warning(`${errorRows.length} linha(s) rejeitada(s) por erro de validação`);
       }
     } catch (err) {
       console.error("Import error", err);
-      toast.error("Falha durante a importação");
+      const msg = err instanceof Error ? err.message : "Falha durante a importação";
+      setBackendError(msg);
+      toast.error(msg);
     } finally {
       setImporting(false);
     }
@@ -148,6 +156,7 @@ export default function BulkImport() {
     setSelectedFile(null);
     setPreviewRows([]);
     setSummary(null);
+    setBackendError(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -398,6 +407,13 @@ export default function BulkImport() {
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {summary.backendError && (
+                <div className="flex flex-col gap-2 rounded-lg bg-status-red/10 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-status-red">Erro do servidor</p>
+                  <p className="text-[13px] text-status-red">{summary.backendError}</p>
                 </div>
               )}
 

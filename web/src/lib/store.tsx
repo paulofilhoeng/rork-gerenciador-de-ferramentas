@@ -241,7 +241,7 @@ interface DataContextValue {
   toggleMovementType: (id: string, isActive: boolean) => Promise<void>;
   savePermission: (siteId: string, userId: string, movementTypeId: string, allowed: boolean) => Promise<void>;
   hasPermission: (userId: string, siteId: string | null, movementTypeName: string) => boolean;
-  bulkInsertTools: (tools: Tool[]) => Promise<number>;
+  bulkInsertTools: (tools: Tool[]) => Promise<{ count: number; error: string | null }>;
 }
 
 function useDataHook() {
@@ -1005,8 +1005,8 @@ function useDataHook() {
   );
 
   const bulkInsertTools = useCallback(
-    async (tools: Tool[]): Promise<number> => {
-      if (tools.length === 0) return 0;
+    async (tools: Tool[]): Promise<{ count: number; error: string | null }> => {
+      if (tools.length === 0) return { count: 0, error: null };
       const rows = tools.map((tool) => ({
         id: tool.id,
         name: tool.name,
@@ -1032,11 +1032,11 @@ function useDataHook() {
       const { error } = await supabase.from("tools").insert(rows);
       if (error) {
         console.error("Bulk insert failed", error);
-        return 0;
+        return { count: 0, error: error.message || "Erro ao inserir no Supabase" };
       }
       // Log the bulk import as a single activity
       await logActivity("bulkImport", "tool", "bulk-import", `${tools.length} ferramenta(s) importada(s)`, undefined, { count: tools.length });
-      return tools.length;
+      return { count: tools.length, error: null };
     },
     [logActivity],
   );

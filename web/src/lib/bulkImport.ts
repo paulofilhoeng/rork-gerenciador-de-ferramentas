@@ -5,7 +5,7 @@
 
 import * as XLSX from "xlsx";
 import type { AuditFrequency, RentalPeriod, Tool, ToolOwnership, ToolStatus } from "./types";
-import { AUDIT_FREQUENCY_LABEL, TOOL_STATUS_LABEL, OWNERSHIP_LABEL, RENTAL_PERIOD_LABEL, computeNextAuditDate, newId } from "./types";
+import { AUDIT_FREQUENCY_LABEL, TOOL_STATUS_LABEL, OWNERSHIP_LABEL, computeNextAuditDate, newId } from "./types";
 
 // MARK: - Column definitions
 
@@ -199,11 +199,11 @@ export function validateRow(
 
   // Required: Propriedade
   if (!ownershipStr) {
-    return { rowNumber, status: "error", error: "Propriedade (Própria/Alugada) é obrigatória" };
+    return { rowNumber, status: "error", error: "Propriedade (Própria/Alugada/Cliente) é obrigatória" };
   }
   const ownership = OWNERSHIP_MAP[ownershipStr.toLowerCase()];
   if (!ownership) {
-    return { rowNumber, status: "error", error: `Propriedade inválida: "${ownershipStr}". Use: Própria ou Alugada` };
+    return { rowNumber, status: "error", error: `Propriedade inválida: "${ownershipStr}". Use: Própria, Alugada ou Cliente` };
   }
 
   // Required: Status
@@ -212,7 +212,7 @@ export function validateRow(
   }
   const baseStatus = STATUS_MAP[statusStr.toLowerCase()];
   if (!baseStatus) {
-    return { rowNumber, status: "error", error: `Status inválido: "${statusStr}". Use: Disponível, Em Uso, Manutenção ou Atrasada` };
+    return { rowNumber, status: "error", error: `Status inválido: "${statusStr}". Use: Disponível, Em Uso, Manutenção, Atrasada ou Desativada` };
   }
 
   // Required: Frequência Auditoria
@@ -324,4 +324,5 @@ export interface ImportSummary {
   failed: number;
   errors: { rowNumber: number; message: string }[];
   importedTools: Tool[];
+  backendError?: string | null;
 }
