@@ -32,7 +32,7 @@ function ToolRow({ tool }: { tool: Tool }) {
   const status = effectiveStatus(tool);
   const days = daysRemaining(tool);
   const site = tool.currentSiteId ? db.sites.find((s) => s.id === tool.currentSiteId) : null;
-  const employee = tool.currentEmployeeId ? db.employees.find((e) => e.id === tool.currentEmployeeId) : null;
+  const user = tool.currentUserId ? db.users.find((u) => u.id === tool.currentUserId) : null;
 
   return (
     <Link to={`/ferramentas/${tool.id}`}>
@@ -57,7 +57,7 @@ function ToolRow({ tool }: { tool: Tool }) {
           </span>
           <span className="flex min-w-0 items-center gap-1.5">
             <User size={11} className="shrink-0" />
-            <span className="truncate">{employee?.name ?? (tool.baseStatus !== "maintenance" ? "Sem responsável" : "—")}</span>
+            <span className="truncate">{user?.name ?? (tool.baseStatus !== "maintenance" ? "Sem responsável" : "—")}</span>
           </span>
         </div>
 

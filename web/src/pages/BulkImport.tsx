@@ -48,11 +48,11 @@ export default function BulkImport() {
     const siteNames = new Map(
       db.sites.map((s) => [s.name.toLowerCase(), s.id]),
     );
-    const employeeNames = new Map(
-      db.employees.map((e) => [e.name.toLowerCase(), e.id]),
+    const userNames = new Map(
+      db.users.map((u) => [u.name.toLowerCase(), u.id]),
     );
-    return { existingSerialNumbers, siteNames, employeeNames };
-  }, [db.tools, db.sites, db.employees]);
+    return { existingSerialNumbers, siteNames, userNames };
+  }, [db.tools, db.sites, db.users]);
 
   const handleFileSelect = useCallback(
     async (file: File) => {
@@ -78,7 +78,7 @@ export default function BulkImport() {
         const ctx: ValidationContext = {
           existingSerialNumbers: new Set(validationContext.existingSerialNumbers),
           siteNames: validationContext.siteNames,
-          employeeNames: validationContext.employeeNames,
+          userNames: validationContext.userNames,
         };
 
         const rows = parsed.map((p) => validateRow(p, ctx));

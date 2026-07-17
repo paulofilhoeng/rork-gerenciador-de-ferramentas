@@ -14,7 +14,6 @@ import Tools from "./pages/Tools";
 import ToolDetail from "./pages/ToolDetail";
 import Companies, { CompanyDetail } from "./pages/Companies";
 import Sites, { SiteDetail } from "./pages/Sites";
-import Employees, { EmployeeDetail } from "./pages/Employees";
 import Users from "./pages/Users";
 import MovementTypes from "./pages/MovementTypes";
 import BulkImport from "./pages/BulkImport";
@@ -84,8 +83,6 @@ function AppRoutes() {
           <Route path="/locadoras/:id" element={<ProtectedRoute><CompanyDetail /></ProtectedRoute>} />
           <Route path="/obras" element={<ProtectedRoute><Sites /></ProtectedRoute>} />
           <Route path="/obras/:id" element={<ProtectedRoute><SiteDetail /></ProtectedRoute>} />
-          <Route path="/funcionarios" element={<ProtectedRoute><Employees /></ProtectedRoute>} />
-          <Route path="/funcionarios/:id" element={<ProtectedRoute><EmployeeDetail /></ProtectedRoute>} />
           <Route path="/relatorios" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
           <Route path="/usuarios" element={<ProtectedRoute adminOnly><Users /></ProtectedRoute>} />
           <Route path="/tipos-movimentacao" element={<ProtectedRoute adminOnly><MovementTypes /></ProtectedRoute>} />

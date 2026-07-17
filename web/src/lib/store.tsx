@@ -12,7 +12,6 @@ import type {
   AuditStatus,
   ConstructionSite,
   DB,
-  Employee,
   MaintenanceRecord,
   MovementTypeEntity,
   RentalCompany,
@@ -42,7 +41,7 @@ function mapTool(row: Record<string, unknown>): Tool {
     createdAt: (row.created_at as string) ?? new Date().toISOString(),
     rentalCompanyId: (row.rental_company_id as string) ?? null,
     currentSiteId: (row.current_site_id as string) ?? null,
-    currentEmployeeId: (row.current_employee_id as string) ?? null,
+    currentUserId: (row.current_user_id as string) ?? null,
     auditFrequency: (row.audit_frequency as AuditFrequency) ?? "monthly",
     lastAuditDate: (row.last_audit_date as string) ?? null,
     nextAuditDate: (row.next_audit_date as string) ?? null,
@@ -77,18 +76,6 @@ function mapSite(row: Record<string, unknown>): ConstructionSite {
   };
 }
 
-function mapEmployee(row: Record<string, unknown>): Employee {
-  return {
-    id: row.id as string,
-    name: row.name as string,
-    role: (row.role as string) ?? "",
-    level: (row.level as string) ?? "",
-    userId: row.user_id ? (row.user_id as string) : null,
-    phone: (row.phone as string) ?? "",
-    email: (row.email as string) ?? "",
-    createdAt: (row.created_at as string) ?? new Date().toISOString(),
-  };
-}
 
 function mapMovement(row: Record<string, unknown>): ToolMovement {
   return {
@@ -166,10 +153,17 @@ function mapActivityLog(row: Record<string, unknown>): ActivityLog {
 function mapProfile(row: Record<string, unknown>): UserProfile {
   return {
     id: row.id as string,
-    email: row.email as string,
     name: (row.name as string) ?? "",
+    email: (row.email as string) ?? null,
+    phone: (row.phone as string) ?? "",
+    cpf: (row.cpf as string) ?? "",
+    jobRole: (row.job_role as string) ?? "",
+    level: (row.level as string) ?? "",
+    siteId: (row.site_id as string) ?? null,
     role: (row.role as string) as UserProfile["role"],
     active: row.active as boolean,
+    hasLoginAccess: row.has_login_access as boolean,
+    authUserId: (row.auth_user_id as string) ?? null,
     createdAt: (row.created_at as string) ?? new Date().toISOString(),
   };
 }
@@ -210,7 +204,6 @@ const EMPTY_DB: DB = {
   tools: [],
   companies: [],
   sites: [],
-  employees: [],
   movements: [],
   attachments: [],
   audits: [],
@@ -231,8 +224,10 @@ interface DataContextValue {
   deleteCompany: (id: string) => Promise<void>;
   saveSite: (site: ConstructionSite) => Promise<void>;
   deleteSite: (id: string) => Promise<void>;
-  saveEmployee: (employee: Employee) => Promise<void>;
-  deleteEmployee: (id: string) => Promise<void>;
+  saveUser: (user: UserProfile, previousRole?: UserRole) => Promise<void>;
+  deleteUser: (id: string) => Promise<void>;
+  grantLoginAccess: (userId: string, email: string, password: string, role: UserRole) => Promise<void>;
+  revokeLoginAccess: (userId: string) => Promise<void>;
   addMovements: (movements: ToolMovement[]) => Promise<void>;
   addAttachments: (attachments: ToolAttachment[]) => Promise<void>;
   removeAttachment: (id: string) => Promise<void>;
@@ -240,9 +235,6 @@ interface DataContextValue {
   reportDamage: (toolId: string, description: string) => Promise<void>;
   startMaintenance: (toolId: string) => Promise<void>;
   returnFromMaintenance: (toolId: string, repairCost: number, invoiceNumber: string, invoiceAttachment: ToolAttachment | null) => Promise<void>;
-  saveUser: (user: UserProfile, previousRole?: UserRole) => Promise<void>;
-  linkEmployeeToUser: (userId: string, employeeId: string | null) => Promise<void>;
-  deleteUser: (id: string) => Promise<void>;
   updateSettings: (partial: Partial<AppSettings>) => Promise<void>;
   saveMovementType: (mt: MovementTypeEntity) => Promise<void>;
   toggleMovementType: (id: string, isActive: boolean) => Promise<void>;
@@ -273,7 +265,6 @@ function useDataHook() {
           toolsRes,
           companiesRes,
           sitesRes,
-          employeesRes,
           movementsRes,
           attachmentsRes,
           auditsRes,
@@ -287,7 +278,6 @@ function useDataHook() {
           supabase.from("tools").select("*"),
           supabase.from("rental_companies").select("*"),
           supabase.from("construction_sites").select("*"),
-          supabase.from("employees").select("*"),
           supabase.from("tool_movements").select("*"),
           supabase.from("tool_attachments").select("*"),
           supabase.from("audit_records").select("*"),
@@ -316,7 +306,6 @@ function useDataHook() {
           tools: (toolsRes.data ?? []).map((r) => mapTool(r as Record<string, unknown>)),
           companies: (companiesRes.data ?? []).map((r) => mapCompany(r as Record<string, unknown>)),
           sites: (sitesRes.data ?? []).map((r) => mapSite(r as Record<string, unknown>)),
-          employees: (employeesRes.data ?? []).map((r) => mapEmployee(r as Record<string, unknown>)),
           movements,
           attachments: (attachmentsRes.data ?? []).map((r) => mapAttachment(r as Record<string, unknown>)),
           audits: (auditsRes.data ?? []).map((r) => mapAudit(r as Record<string, unknown>)),
@@ -364,14 +353,6 @@ function useDataHook() {
           const newRow = mapSite(payload.new as Record<string, unknown>);
           const exists = prev.sites.some((s) => s.id === newRow.id);
           return { ...prev, sites: exists ? prev.sites.map((s) => (s.id === newRow.id ? newRow : s)) : [...prev.sites, newRow] };
-        });
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "employees" }, (payload) => {
-        setDB((prev) => {
-          if (payload.eventType === "DELETE") return { ...prev, employees: prev.employees.filter((e) => e.id !== (payload.old as Record<string, unknown>).id) };
-          const newRow = mapEmployee(payload.new as Record<string, unknown>);
-          const exists = prev.employees.some((e) => e.id === newRow.id);
-          return { ...prev, employees: exists ? prev.employees.map((e) => (e.id === newRow.id ? newRow : e)) : [...prev.employees, newRow] };
         });
       })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "tool_movements" }, (payload) => {
@@ -517,7 +498,7 @@ function useDataHook() {
         rental_end_date: tool.rentalEndDate,
         rental_company_id: tool.rentalCompanyId,
         current_site_id: tool.currentSiteId,
-        current_employee_id: tool.currentEmployeeId,
+        current_user_id: tool.currentUserId,
         audit_frequency: tool.auditFrequency,
         last_audit_date: tool.lastAuditDate,
         next_audit_date: tool.nextAuditDate ?? computeNextAuditDate(tool.auditFrequency),
@@ -636,41 +617,6 @@ function useDataHook() {
       if (site) await logActivity("delete", "site", id, site.name, undefined, undefined, id);
     },
     [db.sites, logActivity],
-  );
-
-  const saveEmployee = useCallback(
-    async (employee: Employee) => {
-      const { data: existing } = await supabase.from("employees").select("id").eq("id", employee.id).maybeSingle();
-      const isNew = !existing;
-      const { error } = await supabase.from("employees").upsert({
-        id: employee.id,
-        name: employee.name,
-        role: employee.role,
-        level: employee.level,
-        user_id: employee.userId,
-        phone: employee.phone,
-        email: employee.email,
-      });
-      if (error) {
-        toast.error("Falha ao salvar funcionário");
-        return;
-      }
-      await logActivity(isNew ? "create" : "edit", "employee", employee.id, employee.name);
-    },
-    [logActivity],
-  );
-
-  const deleteEmployee = useCallback(
-    async (id: string) => {
-      const emp = db.employees.find((e) => e.id === id);
-      const { error } = await supabase.from("employees").delete().eq("id", id);
-      if (error) {
-        toast.error("Falha ao excluir funcionário");
-        return;
-      }
-      if (emp) await logActivity("delete", "employee", id, emp.name);
-    },
-    [db.employees, logActivity],
   );
 
   const addMovements = useCallback(
@@ -879,39 +825,80 @@ function useDataHook() {
 
   const saveUser = useCallback(
     async (updatedUser: UserProfile, previousRole?: UserRole) => {
-      const { error } = await supabase
-        .from("profiles")
-        .update({ name: updatedUser.name, role: updatedUser.role, active: updatedUser.active })
-        .eq("id", updatedUser.id);
+      const isNew = !db.users.some((u) => u.id === updatedUser.id);
+      const row = {
+        id: updatedUser.id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        phone: updatedUser.phone,
+        cpf: updatedUser.cpf,
+        job_role: updatedUser.jobRole,
+        level: updatedUser.level,
+        site_id: updatedUser.siteId,
+        role: updatedUser.role,
+        active: updatedUser.active,
+        has_login_access: updatedUser.hasLoginAccess,
+      };
+      const { error } = await supabase.from("profiles").upsert(row);
       if (error) {
-        toast.error("Falha ao atualizar usuário");
+        toast.error("Falha ao salvar usuário");
+        console.error(error);
         return;
       }
       if (previousRole && previousRole !== updatedUser.role) {
         await logActivity("roleChange", "user", updatedUser.id, updatedUser.name, { role: previousRole }, { role: updatedUser.role });
       } else {
-        await logActivity("edit", "user", updatedUser.id, updatedUser.name);
+        await logActivity(isNew ? "create" : "edit", "user", updatedUser.id, updatedUser.name);
       }
     },
-    [logActivity],
+    [db.users, logActivity],
   );
 
-  const linkEmployeeToUser = useCallback(
-    async (userId: string, employeeId: string | null) => {
-      // Clear any previous link to this user
-      await supabase.from("employees").update({ user_id: null }).eq("user_id", userId);
-      // Set new link (or leave null if employeeId is null)
-      if (employeeId) {
-        const { error } = await supabase.from("employees").update({ user_id: userId }).eq("id", employeeId);
-        if (error) {
-          toast.error("Falha ao vincular funcionário");
-          return;
-        }
+  const grantLoginAccess = useCallback(
+    async (userId: string, email: string, password: string, role: UserRole) => {
+      const u = db.users.find((x) => x.id === userId);
+      if (!u) {
+        toast.error("Usuário não encontrado");
+        return;
       }
-      const emp = db.employees.find((e) => e.id === employeeId);
-      await logActivity("edit", "user", userId, undefined, { linkedEmployee: employeeId ? emp?.name : null });
+      // Patch the record profile with the email/role so the sign-up trigger merges into it
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({ email, role, active: true, has_login_access: true })
+        .eq("id", userId);
+      if (updateError) {
+        toast.error("Falha ao preparar acesso");
+        console.error(updateError);
+        return;
+      }
+      const { error: signUpError } = await supabase.auth.signUp({ email, password, options: { data: { name: u.name } } });
+      if (signUpError) {
+        toast.error("Falha ao criar credenciais: " + signUpError.message);
+        console.error(signUpError);
+        return;
+      }
+      await logActivity("roleChange", "user", userId, u.name, { hasLoginAccess: false }, { hasLoginAccess: true, email, role });
+      toast.success("Acesso ao app concedido");
     },
-    [db.employees, logActivity],
+    [db.users, logActivity],
+  );
+
+  const revokeLoginAccess = useCallback(
+    async (userId: string) => {
+      const u = db.users.find((x) => x.id === userId);
+      const { error } = await supabase
+        .from("profiles")
+        .update({ has_login_access: false, active: false, auth_user_id: null })
+        .eq("id", userId);
+      if (error) {
+        toast.error("Falha ao revogar acesso");
+        console.error(error);
+        return;
+      }
+      if (u) await logActivity("roleChange", "user", userId, u.name, { hasLoginAccess: true }, { hasLoginAccess: false });
+      toast.success("Acesso ao app revogado");
+    },
+    [db.users, logActivity],
   );
 
   const deleteUser = useCallback(
@@ -1033,7 +1020,7 @@ function useDataHook() {
         rental_end_date: tool.rentalEndDate,
         rental_company_id: tool.rentalCompanyId,
         current_site_id: tool.currentSiteId,
-        current_employee_id: tool.currentEmployeeId,
+        current_user_id: tool.currentUserId,
         audit_frequency: tool.auditFrequency,
         last_audit_date: tool.lastAuditDate,
         next_audit_date: tool.nextAuditDate ?? computeNextAuditDate(tool.auditFrequency),
@@ -1060,8 +1047,6 @@ function useDataHook() {
     deleteCompany,
     saveSite,
     deleteSite,
-    saveEmployee,
-    deleteEmployee,
     addMovements,
     addAttachments,
     removeAttachment,
@@ -1070,8 +1055,9 @@ function useDataHook() {
     startMaintenance,
     returnFromMaintenance,
     saveUser,
-    linkEmployeeToUser,
     deleteUser,
+    grantLoginAccess,
+    revokeLoginAccess,
     updateSettings,
     saveMovementType,
     toggleMovementType,
@@ -1089,8 +1075,8 @@ export function useToolRelations() {
     () => ({
       companyById: (id: string | null) => (id ? db.companies.find((c) => c.id === id) ?? null : null),
       siteById: (id: string | null) => (id ? db.sites.find((s) => s.id === id) ?? null : null),
-      employeeById: (id: string | null) => (id ? db.employees.find((e) => e.id === id) ?? null : null),
+      userById: (id: string | null) => (id ? db.users.find((u) => u.id === id) ?? null : null),
     }),
-    [db.companies, db.sites, db.employees],
+    [db.companies, db.sites, db.users],
   );
 }

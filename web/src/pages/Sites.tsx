@@ -256,7 +256,7 @@ export function SiteDetail() {
     );
   }
 
-  const employeeName = (empId: string | null) => (empId ? db.employees.find((e) => e.id === empId)?.name ?? null : null);
+  const userName = (userId: string | null) => (userId ? db.users.find((u) => u.id === userId)?.name ?? null : null);
   const color = SITE_STATUS_COLOR[site.status];
 
   return (
@@ -361,8 +361,8 @@ export function SiteDetail() {
                     <Wrench size={12} className={`w-7 shrink-0 ${tool.ownership === "rented" ? "text-app-orange" : "text-app-accent"}`} />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-white">{tool.name}</p>
-                      {employeeName(tool.currentEmployeeId) && (
-                        <p className="truncate text-[11px] text-app-muted">{employeeName(tool.currentEmployeeId)}</p>
+                      {userName(tool.currentUserId) && (
+                        <p className="truncate text-[11px] text-app-muted">{userName(tool.currentUserId)}</p>
                       )}
                     </div>
                     <StatusBadge label={TOOL_STATUS_LABEL[status]} color={TOOL_STATUS_COLOR[status]} icon={TOOL_STATUS_ICON[status]} />

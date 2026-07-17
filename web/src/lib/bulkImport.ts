@@ -145,7 +145,7 @@ const AUDIT_MAP: Record<string, AuditFrequency> = {
 export interface ValidationContext {
   existingSerialNumbers: Set<string>;
   siteNames: Map<string, string>; // lowercased name -> id
-  employeeNames: Map<string, string>; // lowercased name -> id
+  userNames: Map<string, string>; // lowercased name -> id
 }
 
 /**
@@ -177,7 +177,7 @@ export function validateRow(
   const ownershipStr = getCol(["Propriedade *", "Propriedade"]);
   const statusStr = getCol(["Status *", "Status"]);
   const siteName = getCol(["Obra/Estoque", "Obra", "Estoque"]);
-  const employeeName = getCol(["Responsavel", "Responsável"]);
+  const userName = getCol(["Responsavel", "Responsável"]);
   const auditFreqStr = getCol(["Frequencia Auditoria *", "Frequencia", "Frequência Auditoria"]);
   const lastAuditStr = getCol(["Data Ultima Auditoria", "Data da Ultima Auditoria", "Data Última Auditoria"]);
   const dailyCostStr = getCol(["Custo Diario (R$)", "Custo Diario", "Custo"]);
@@ -237,14 +237,14 @@ export function validateRow(
     currentSiteId = siteId;
   }
 
-  // Employee validation (optional field, but if filled must exist)
-  let currentEmployeeId: string | null = null;
-  if (employeeName) {
-    const empId = ctx.employeeNames.get(employeeName.toLowerCase());
-    if (!empId) {
-      return { rowNumber, status: "error", error: `Responsável não encontrado: "${employeeName}"` };
+  // User validation (optional field, but if filled must exist)
+  let currentUserId: string | null = null;
+  if (userName) {
+    const userId = ctx.userNames.get(userName.toLowerCase());
+    if (!userId) {
+      return { rowNumber, status: "error", error: `Responsável não encontrado: "${userName}"` };
     }
-    currentEmployeeId = empId;
+    currentUserId = userId;
   }
 
   // Date parsing
@@ -289,7 +289,7 @@ export function validateRow(
     statusUpdatedAt: new Date().toISOString(),
     rentalCompanyId: null,
     currentSiteId,
-    currentEmployeeId,
+    currentUserId,
     auditFrequency,
     lastAuditDate,
     nextAuditDate,

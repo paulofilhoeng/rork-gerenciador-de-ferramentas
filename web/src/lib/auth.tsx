@@ -24,11 +24,11 @@ function useAuthHook() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = useCallback(async (userId: string) => {
+  const fetchProfile = useCallback(async (authUserId: string) => {
     const { data, error } = await supabase
       .from("profiles")
       .select("*")
-      .eq("id", userId)
+      .eq("auth_user_id", authUserId)
       .maybeSingle();
 
     if (error) {
@@ -39,10 +39,17 @@ function useAuthHook() {
     if (data) {
       setProfile({
         id: data.id,
-        email: data.email,
         name: data.name,
+        email: data.email ?? null,
+        phone: data.phone ?? "",
+        cpf: data.cpf ?? "",
+        jobRole: data.job_role ?? "",
+        level: data.level ?? "",
+        siteId: data.site_id ?? null,
         role: data.role as UserRole,
         active: data.active,
+        hasLoginAccess: data.has_login_access,
+        authUserId: data.auth_user_id ?? null,
         createdAt: data.created_at,
       });
     }
@@ -91,14 +98,10 @@ function useAuthHook() {
     });
     if (error) throw error;
 
-    // The database trigger `handle_new_user` automatically inserts the profile
-    // with role='admin' for the very first user, and role='user' thereafter.
-    // We only need to patch the name if the trigger used the email prefix as fallback.
+    // The database trigger `handle_new_user` automatically inserts/merges the profile.
+    // If a profile already exists with this email, it is merged and its name is kept unless empty.
     if (data.user) {
-      await supabase
-        .from("profiles")
-        .update({ name })
-        .eq("id", data.user.id);
+      await supabase.from("profiles").update({ name }).eq("auth_user_id", data.user.id);
     }
   }, []);
 
@@ -112,7 +115,7 @@ function useAuthHook() {
     const { error } = await supabase
       .from("profiles")
       .update({ name })
-      .eq("id", user.id);
+      .eq("auth_user_id", user.id);
     if (error) throw error;
     await fetchProfile(user.id);
   }, [user, fetchProfile]);

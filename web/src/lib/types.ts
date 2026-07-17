@@ -188,7 +188,7 @@ export interface Tool {
   statusUpdatedAt: string | null;
   rentalCompanyId: string | null;
   currentSiteId: string | null;
-  currentEmployeeId: string | null;
+  currentUserId: string | null;
   auditFrequency: AuditFrequency;
   lastAuditDate: string | null;
   nextAuditDate: string | null;
@@ -214,17 +214,6 @@ export interface ConstructionSite {
   status: SiteStatus;
   startDate: string | null;
   notes: string;
-  createdAt: string;
-}
-
-export interface Employee {
-  id: string;
-  name: string;
-  role: string;
-  level: string;
-  userId: string | null;
-  phone: string;
-  email: string;
   createdAt: string;
 }
 
@@ -254,10 +243,17 @@ export interface ToolAttachment {
 
 export interface UserProfile {
   id: string;
-  email: string;
   name: string;
+  email: string | null;
+  phone: string;
+  cpf: string;
+  jobRole: string;
+  level: string;
+  siteId: string | null;
   role: UserRole;
   active: boolean;
+  hasLoginAccess: boolean;
+  authUserId: string | null;
   createdAt: string;
 }
 
@@ -330,7 +326,6 @@ export interface DB {
   tools: Tool[];
   companies: RentalCompany[];
   sites: ConstructionSite[];
-  employees: Employee[];
   movements: ToolMovement[];
   attachments: ToolAttachment[];
   audits: AuditRecord[];

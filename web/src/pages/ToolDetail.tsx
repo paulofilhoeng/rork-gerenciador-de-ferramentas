@@ -102,7 +102,7 @@ export default function ToolDetail() {
   const days = daysRemaining(tool);
   const company = tool.rentalCompanyId ? db.companies.find((c) => c.id === tool.rentalCompanyId) : null;
   const site = tool.currentSiteId ? db.sites.find((s) => s.id === tool.currentSiteId) : null;
-  const employee = tool.currentEmployeeId ? db.employees.find((e) => e.id === tool.currentEmployeeId) : null;
+  const user = tool.currentUserId ? db.users.find((u) => u.id === tool.currentUserId) : null;
   const isInMaintenance = tool.baseStatus === "maintenance";
   const hasActiveMaintenance = maintenanceRecords.some((m) => m.status === "active");
 
@@ -260,7 +260,7 @@ export default function ToolDetail() {
             <IconTile icon={User} color="blue" size={32} iconSize={16} />
             <div>
               <p className="text-xs text-app-muted">Responsável</p>
-              <p className="text-[15px] font-semibold text-white">{employee?.name ?? "Sem responsável"}</p>
+              <p className="text-[15px] font-semibold text-white">{user?.name ?? "Sem responsável"}</p>
             </div>
           </div>
         </Card>

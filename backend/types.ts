@@ -166,47 +166,6 @@ export type Database = {
         }
         Relationships: []
       }
-      employees: {
-        Row: {
-          created_at: string | null
-          email: string | null
-          id: string
-          level: string | null
-          name: string
-          phone: string | null
-          role: string | null
-          user_id: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          email?: string | null
-          id?: string
-          level?: string | null
-          name: string
-          phone?: string | null
-          role?: string | null
-          user_id?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          email?: string | null
-          id?: string
-          level?: string | null
-          name?: string
-          phone?: string | null
-          role?: string | null
-          user_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "employees_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       maintenance_records: {
         Row: {
           id: string
@@ -297,32 +256,61 @@ export type Database = {
       profiles: {
         Row: {
           active: boolean
+          auth_user_id: string | null
+          cpf: string | null
           created_at: string | null
-          email: string
+          email: string | null
+          has_login_access: boolean | null
           id: string
+          job_role: string | null
+          level: string | null
           name: string
+          phone: string | null
           role: string
+          site_id: string | null
           updated_at: string | null
         }
         Insert: {
           active?: boolean
+          auth_user_id?: string | null
+          cpf?: string | null
           created_at?: string | null
-          email: string
+          email?: string | null
+          has_login_access?: boolean | null
           id: string
+          job_role?: string | null
+          level?: string | null
           name?: string
+          phone?: string | null
           role?: string
+          site_id?: string | null
           updated_at?: string | null
         }
         Update: {
           active?: boolean
+          auth_user_id?: string | null
+          cpf?: string | null
           created_at?: string | null
-          email?: string
+          email?: string | null
+          has_login_access?: boolean | null
           id?: string
+          job_role?: string | null
+          level?: string | null
           name?: string
+          phone?: string | null
           role?: string
+          site_id?: string | null
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "construction_sites"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       rental_companies: {
         Row: {
@@ -507,8 +495,8 @@ export type Database = {
           base_status: string
           brand: string | null
           created_at: string | null
-          current_employee_id: string | null
           current_site_id: string | null
+          current_user_id: string | null
           daily_rental_cost: number | null
           id: string
           last_audit_date: string | null
@@ -529,8 +517,8 @@ export type Database = {
           base_status?: string
           brand?: string | null
           created_at?: string | null
-          current_employee_id?: string | null
           current_site_id?: string | null
+          current_user_id?: string | null
           daily_rental_cost?: number | null
           id?: string
           last_audit_date?: string | null
@@ -551,8 +539,8 @@ export type Database = {
           base_status?: string
           brand?: string | null
           created_at?: string | null
-          current_employee_id?: string | null
           current_site_id?: string | null
+          current_user_id?: string | null
           daily_rental_cost?: number | null
           id?: string
           last_audit_date?: string | null
@@ -570,17 +558,17 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "tools_current_employee_id_fkey"
-            columns: ["current_employee_id"]
-            isOneToOne: false
-            referencedRelation: "employees"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "tools_current_site_id_fkey"
             columns: ["current_site_id"]
             isOneToOne: false
             referencedRelation: "construction_sites"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tools_current_user_id_fkey"
+            columns: ["current_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {

@@ -84,11 +84,11 @@ export function buildSeedData(): DB {
     createdAt: now,
   };
 
-  const joao = { id: newId(), name: "João Pereira", role: "Mestre de Obras", level: "Líder de Equipe", userId: null as string | null, phone: "(11) 98888-1111", email: "joao@ferragest.com.br", createdAt: now };
-  const pedro = { id: newId(), name: "Pedro Alves", role: "Pedreiro", level: "Operário", userId: null as string | null, phone: "(11) 98888-2222", email: "pedro@ferragest.com.br", createdAt: now };
-  const maria = { id: newId(), name: "Maria Fernandes", role: "Encarregada", level: "Supervisora", userId: null as string | null, phone: "(11) 98888-3333", email: "maria@ferragest.com.br", createdAt: now };
-  const jose = { id: newId(), name: "José Carlos", role: "Eletricista", level: "Especialista", userId: null as string | null, phone: "(11) 98888-4444", email: "jose@ferragest.com.br", createdAt: now };
-  const lucas = { id: newId(), name: "Lucas Oliveira", role: "Ajudante", level: "Operário", userId: null as string | null, phone: "(11) 98888-5555", email: "lucas@ferragest.com.br", createdAt: now };
+  const joao = { id: newId(), name: "João Pereira", jobRole: "Mestre de Obras", level: "Líder de Equipe", cpf: "", siteId: null as string | null, phone: "(11) 98888-1111", email: "joao@ferragest.com.br" as string | null, role: "user" as const, active: true, hasLoginAccess: false, authUserId: null as string | null, createdAt: now };
+  const pedro = { id: newId(), name: "Pedro Alves", jobRole: "Pedreiro", level: "Operário", cpf: "", siteId: null as string | null, phone: "(11) 98888-2222", email: "pedro@ferragest.com.br" as string | null, role: "user" as const, active: true, hasLoginAccess: false, authUserId: null as string | null, createdAt: now };
+  const maria = { id: newId(), name: "Maria Fernandes", jobRole: "Encarregada", level: "Supervisora", cpf: "", siteId: null as string | null, phone: "(11) 98888-3333", email: "maria@ferragest.com.br" as string | null, role: "user" as const, active: true, hasLoginAccess: false, authUserId: null as string | null, createdAt: now };
+  const jose = { id: newId(), name: "José Carlos", jobRole: "Eletricista", level: "Especialista", cpf: "", siteId: null as string | null, phone: "(11) 98888-4444", email: "jose@ferragest.com.br" as string | null, role: "user" as const, active: true, hasLoginAccess: false, authUserId: null as string | null, createdAt: now };
+  const lucas = { id: newId(), name: "Lucas Oliveira", jobRole: "Ajudante", level: "Operário", cpf: "", siteId: null as string | null, phone: "(11) 98888-5555", email: "lucas@ferragest.com.br" as string | null, role: "user" as const, active: true, hasLoginAccess: false, authUserId: null as string | null, createdAt: now };
 
   const base = {
     notes: "",
@@ -98,7 +98,7 @@ export function buildSeedData(): DB {
     rentalEndDate: null as string | null,
     rentalCompanyId: null as string | null,
     currentSiteId: null as string | null,
-    currentEmployeeId: null as string | null,
+    currentUserId: null as string | null,
     createdAt: now,
     statusUpdatedAt: now,
     auditFrequency: "monthly" as AuditFrequency,
@@ -107,15 +107,15 @@ export function buildSeedData(): DB {
   };
 
   const tools: Tool[] = [
-    { ...base, id: newId(), name: "Betoneira 400L", brand: "Schwinn", model: "MX-400", serialNumber: "SN-001-BET", ownership: "own", baseStatus: "inUse", purchaseDate: monthsAgo(24), currentSiteId: torreNorte.id, currentEmployeeId: pedro.id },
-    { ...base, id: newId(), name: "Andaime Tubular 20m²", brand: "Gerdau", model: "AT-200", serialNumber: "SN-002-AND", ownership: "own", baseStatus: "inUse", currentSiteId: residencialVerde.id, currentEmployeeId: joao.id },
+    { ...base, id: newId(), name: "Betoneira 400L", brand: "Schwinn", model: "MX-400", serialNumber: "SN-001-BET", ownership: "own", baseStatus: "inUse", purchaseDate: monthsAgo(24), currentSiteId: torreNorte.id, currentUserId: pedro.id },
+    { ...base, id: newId(), name: "Andaime Tubular 20m²", brand: "Gerdau", model: "AT-200", serialNumber: "SN-002-AND", ownership: "own", baseStatus: "inUse", currentSiteId: residencialVerde.id, currentUserId: joao.id },
     { ...base, id: newId(), name: "Furadeira de Impacto", brand: "Bosch", model: "GSB 13 RE", serialNumber: "SN-003-FUR", ownership: "own", baseStatus: "available", purchaseDate: monthsAgo(8) },
-    { ...base, id: newId(), name: "Nível a Laser", brand: "Bosch", model: "GLL 3-80", serialNumber: "SN-004-NIV", ownership: "own", baseStatus: "inUse", currentSiteId: torreNorte.id, currentEmployeeId: jose.id },
+    { ...base, id: newId(), name: "Nível a Laser", brand: "Bosch", model: "GLL 3-80", serialNumber: "SN-004-NIV", ownership: "own", baseStatus: "inUse", currentSiteId: torreNorte.id, currentUserId: jose.id },
     { ...base, id: newId(), name: "Compactador de Solo", brand: "Wacker Neuson", model: "DPU 6555", serialNumber: "SN-005-COM", ownership: "own", baseStatus: "maintenance", notes: "Motor com vazamento de óleo, em revisão técnica" },
-    { ...base, id: newId(), name: "Guindaste Telescópico 30t", brand: "Liebherr", model: "LTM 1030", serialNumber: "TR-001-GUI", ownership: "rented", baseStatus: "inUse", dailyRentalCost: 850, rentalStartDate: daysAgo(12), rentalEndDate: daysFromNow(5), rentalCompanyId: techRent.id, currentSiteId: torreNorte.id, currentEmployeeId: joao.id },
-    { ...base, id: newId(), name: "Plataforma Elevatória 12m", brand: "Genie", model: "GS-3246", serialNumber: "TR-002-PLA", ownership: "rented", baseStatus: "inUse", dailyRentalCost: 320, rentalStartDate: daysAgo(20), rentalEndDate: daysFromNow(2), rentalCompanyId: obraPrime.id, currentSiteId: residencialVerde.id, currentEmployeeId: maria.id },
-    { ...base, id: newId(), name: "Mini Escavadeira 1.7t", brand: "Bobcat", model: "E17", serialNumber: "TR-003-ESC", ownership: "rented", baseStatus: "inUse", dailyRentalCost: 280, rentalStartDate: daysAgo(15), rentalEndDate: daysAgo(1), rentalCompanyId: buildMax.id, currentSiteId: shoppingSul.id, currentEmployeeId: lucas.id },
-    { ...base, id: newId(), name: "Gerador 15 kVA", brand: "Honda", model: "EU15", serialNumber: "TR-004-GER", ownership: "rented", baseStatus: "inUse", dailyRentalCost: 150, rentalStartDate: daysAgo(5), rentalEndDate: daysFromNow(25), rentalCompanyId: techRent.id, currentSiteId: torreNorte.id, currentEmployeeId: jose.id },
+    { ...base, id: newId(), name: "Guindaste Telescópico 30t", brand: "Liebherr", model: "LTM 1030", serialNumber: "TR-001-GUI", ownership: "rented", baseStatus: "inUse", dailyRentalCost: 850, rentalStartDate: daysAgo(12), rentalEndDate: daysFromNow(5), rentalCompanyId: techRent.id, currentSiteId: torreNorte.id, currentUserId: joao.id },
+    { ...base, id: newId(), name: "Plataforma Elevatória 12m", brand: "Genie", model: "GS-3246", serialNumber: "TR-002-PLA", ownership: "rented", baseStatus: "inUse", dailyRentalCost: 320, rentalStartDate: daysAgo(20), rentalEndDate: daysFromNow(2), rentalCompanyId: obraPrime.id, currentSiteId: residencialVerde.id, currentUserId: maria.id },
+    { ...base, id: newId(), name: "Mini Escavadeira 1.7t", brand: "Bobcat", model: "E17", serialNumber: "TR-003-ESC", ownership: "rented", baseStatus: "inUse", dailyRentalCost: 280, rentalStartDate: daysAgo(15), rentalEndDate: daysAgo(1), rentalCompanyId: buildMax.id, currentSiteId: shoppingSul.id, currentUserId: lucas.id },
+    { ...base, id: newId(), name: "Gerador 15 kVA", brand: "Honda", model: "EU15", serialNumber: "TR-004-GER", ownership: "rented", baseStatus: "inUse", dailyRentalCost: 150, rentalStartDate: daysAgo(5), rentalEndDate: daysFromNow(25), rentalCompanyId: techRent.id, currentSiteId: torreNorte.id, currentUserId: jose.id },
     { ...base, id: newId(), name: "Compressor de Ar 100 PSI", brand: "Atlas Copco", model: "XAS 47", serialNumber: "TR-005-COMP", ownership: "rented", baseStatus: "available", dailyRentalCost: 95, rentalStartDate: daysAgo(3), rentalEndDate: daysFromNow(10), rentalCompanyId: obraPrime.id },
   ];
 
@@ -136,13 +136,12 @@ export function buildSeedData(): DB {
     tools,
     companies: [techRent, obraPrime, buildMax],
     sites: [torreNorte, residencialVerde, shoppingSul],
-    employees: [joao, pedro, maria, jose, lucas],
     movements,
     attachments: [],
     audits: [],
     maintenance: [],
     activityLogs: [],
-    users: [],
+    users: [joao, pedro, maria, jose, lucas],
     movementTypes: [],
     siteUserPermissions: [],
     settings: { notificationsEnabled: false, alertDaysBefore: 3 },

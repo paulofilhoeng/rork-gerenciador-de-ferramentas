@@ -32,7 +32,7 @@ export function ToolEditDialog({ tool, open, onClose }: Props) {
   const [rentalEndDate, setRentalEndDate] = useState("");
   const [companyId, setCompanyId] = useState("");
   const [siteId, setSiteId] = useState("");
-  const [employeeId, setEmployeeId] = useState("");
+  const [userId, setUserId] = useState("");
   const [auditFrequency, setAuditFrequency] = useState<AuditFrequency>("monthly");
   const [showError, setShowError] = useState(false);
 
@@ -51,7 +51,7 @@ export function ToolEditDialog({ tool, open, onClose }: Props) {
     setRentalEndDate(toDateInputValue(tool?.rentalEndDate ?? null));
     setCompanyId(tool?.rentalCompanyId ?? "");
     setSiteId(tool?.currentSiteId ?? "");
-    setEmployeeId(tool?.currentEmployeeId ?? "");
+    setUserId(tool?.currentUserId ?? "");
     setAuditFrequency(tool?.auditFrequency ?? "monthly");
     setShowError(false);
   }, [open, tool]);
@@ -78,7 +78,7 @@ export function ToolEditDialog({ tool, open, onClose }: Props) {
       createdAt: tool?.createdAt ?? new Date().toISOString(),
       rentalCompanyId: companyId || null,
       currentSiteId: isAdmin ? siteId || null : (tool?.currentSiteId ?? null),
-      currentEmployeeId: employeeId || null,
+      currentUserId: userId || null,
       auditFrequency,
       lastAuditDate: tool?.lastAuditDate ?? null,
       nextAuditDate: tool?.nextAuditDate ?? computeNextAuditDate(auditFrequency),
@@ -104,7 +104,7 @@ export function ToolEditDialog({ tool, open, onClose }: Props) {
 
     if (!isNew && tool) {
       const siteName = (id: string | null) => (id ? db.sites.find((s) => s.id === id)?.name ?? null : null);
-      const empName = (id: string | null) => (id ? db.employees.find((e) => e.id === id)?.name ?? null : null);
+      const userName = (id: string | null) => (id ? db.users.find((u) => u.id === id)?.name ?? null : null);
 
       const oldSite = siteName(tool.currentSiteId);
       const newSite = siteName(target.currentSiteId);
@@ -114,12 +114,12 @@ export function ToolEditDialog({ tool, open, onClose }: Props) {
         else if (oldSite) record("siteRemoved", "Removida da obra", oldSite, "");
       }
 
-      const oldEmp = empName(tool.currentEmployeeId);
-      const newEmp = empName(target.currentEmployeeId);
-      if (newEmp !== oldEmp) {
-        if (oldEmp && newEmp) record("employeeChanged", "Responsável alterado", oldEmp, newEmp);
-        else if (newEmp) record("employeeAssigned", "Responsável atribuído", "", newEmp);
-        else if (oldEmp) record("employeeRemoved", "Responsável removido", oldEmp, "");
+      const oldUser = userName(tool.currentUserId);
+      const newUser = userName(target.currentUserId);
+      if (newUser !== oldUser) {
+        if (oldUser && newUser) record("employeeChanged", "Responsável alterado", oldUser, newUser);
+        else if (newUser) record("employeeAssigned", "Responsável atribuído", "", newUser);
+        else if (oldUser) record("employeeRemoved", "Responsável removido", oldUser, "");
       }
 
       if (target.baseStatus !== tool.baseStatus) {
@@ -225,10 +225,10 @@ export function ToolEditDialog({ tool, open, onClose }: Props) {
               {!isAdmin && <p className="mt-1 text-[11px] text-app-muted/70">Apenas administradores podem alterar a obra</p>}
             </Field>
             <Field label="Responsável">
-              <select className={inputClass} value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
+              <select className={inputClass} value={userId} onChange={(e) => setUserId(e.target.value)}>
                 <option value="">Ninguém</option>
-                {db.employees.map((e) => (
-                  <option key={e.id} value={e.id}>{e.name}</option>
+                {db.users.map((u) => (
+                  <option key={u.id} value={u.id}>{u.name}</option>
                 ))}
               </select>
             </Field>

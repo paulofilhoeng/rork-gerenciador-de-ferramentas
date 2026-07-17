@@ -11,7 +11,6 @@ const NAV_ITEMS = [
   { to: "/ferramentas", label: "Ferramentas", icon: Wrench },
   { to: "/locadoras", label: "Locadoras", icon: Shield },
   { to: "/obras", label: "Obras", icon: Hammer },
-  { to: "/funcionarios", label: "Funcionários", icon: Users },
   { to: "/relatorios", label: "Relatórios", icon: ClipboardList },
   { to: "/ajustes", label: "Ajustes", icon: Settings },
 ];

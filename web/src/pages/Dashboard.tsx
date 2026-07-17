@@ -89,11 +89,11 @@ export default function Dashboard() {
 
   const companyName = (id: string | null) => (id ? db.companies.find((c) => c.id === id)?.name ?? "" : "");
 
-  // My panel: linked employee, site, tools under my responsibility
+  // My panel: unified user record, site(s), tools under my responsibility
   const myPanel = useMemo(() => {
-    const employee = db.employees.find((e) => e.userId === profile?.id) ?? null;
-    if (!employee) return null;
-    const myTools = db.tools.filter((t) => t.currentEmployeeId === employee.id);
+    const userRecord = db.users.find((u) => u.id === profile?.id) ?? null;
+    if (!userRecord) return null;
+    const myTools = db.tools.filter((t) => t.currentUserId === userRecord.id);
     const mySites = db.sites.filter((s) =>
       myTools.some((t) => t.currentSiteId === s.id),
     );
@@ -103,8 +103,8 @@ export default function Dashboard() {
       maintenance: myTools.filter((t) => effectiveStatus(t) === "maintenance").length,
       overdue: myTools.filter((t) => effectiveStatus(t) === "overdue").length,
     };
-    return { employee, myTools, mySites, myToolsByStatus };
-  }, [db.employees, db.tools, db.sites, profile?.id]);
+    return { userRecord, myTools, mySites, myToolsByStatus };
+  }, [db.users, db.tools, db.sites, profile?.id]);
 
   const stats = useMemo(() => {
     const ownTools = db.tools.filter((t) => t.ownership === "own");
@@ -179,13 +179,13 @@ export default function Dashboard() {
           <div className="flex flex-col gap-3">
             <SectionHeader title={isAdmin ? "Meu Painel" : "Minha Responsabilidade"} />
             <Card className="flex flex-col gap-3 border-app-accent/25 bg-app-accent/[0.04] p-4">
-              {/* Employee identity */}
+              {/* User identity */}
               <div className="flex items-center gap-3">
                 <IconTile icon={HardHat} color="accent" size={40} iconSize={20} />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-base font-bold text-white">{myPanel.employee.name}</p>
+                  <p className="truncate text-base font-bold text-white">{myPanel.userRecord.name}</p>
                   <p className="truncate text-xs text-app-muted">
-                    {myPanel.employee.role}{myPanel.employee.role && myPanel.employee.level ? " • " : ""}{myPanel.employee.level}
+                    {myPanel.userRecord.jobRole}{myPanel.userRecord.jobRole && myPanel.userRecord.level ? " • " : ""}{myPanel.userRecord.level}
                   </p>
                 </div>
               </div>
@@ -253,7 +253,7 @@ export default function Dashboard() {
           <StatCard title="Em Uso" value={stats.inUseTools.length} icon={PlayCircle} color="blue" />
           <StatCard title="Disponíveis" value={stats.availableTools.length} icon={CheckCircle2} color="green" />
           <StatCard title="Locadoras" value={db.companies.length} icon={Building2} color="accent" />
-          <StatCard title="Funcionários" value={db.employees.length} icon={Users} color="appOrange" />
+          <StatCard title="Usuários" value={db.users.length} icon={Users} color="appOrange" />
         </div>
 
         {/* Alerts */}

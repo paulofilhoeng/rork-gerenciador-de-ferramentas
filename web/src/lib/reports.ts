@@ -1,5 +1,5 @@
 import JSZip from "jszip";
-import type { ConstructionSite, DB, Employee, RentalCompany, Tool, ToolAttachment, ToolMovement } from "./types";
+import type { ConstructionSite, DB, UserProfile, RentalCompany, Tool, ToolAttachment, ToolMovement } from "./types";
 import {
   ATTACHMENT_PURPOSE_LABEL,
   MOVEMENT_LABEL,
@@ -36,17 +36,17 @@ function downloadCSV(content: string, filename: string) {
 interface Lookups {
   companyName: (id: string | null) => string;
   siteName: (id: string | null) => string;
-  employeeName: (id: string | null) => string;
+  userName: (id: string | null) => string;
 }
 
 function buildLookups(db: DB): Lookups {
   const companies = new Map(db.companies.map((c: RentalCompany) => [c.id, c.name]));
   const sites = new Map(db.sites.map((s: ConstructionSite) => [s.id, s.name]));
-  const employees = new Map(db.employees.map((e: Employee) => [e.id, e.name]));
+  const users = new Map(db.users.map((u: UserProfile) => [u.id, u.name]));
   return {
     companyName: (id) => (id ? companies.get(id) ?? "" : ""),
     siteName: (id) => (id ? sites.get(id) ?? "" : ""),
-    employeeName: (id) => (id ? employees.get(id) ?? "" : ""),
+    userName: (id) => (id ? users.get(id) ?? "" : ""),
   };
 }
 
@@ -71,7 +71,7 @@ export async function generateToolsReport(db: DB): Promise<void> {
       OWNERSHIP_LABEL[tool.ownership],
       TOOL_STATUS_LABEL[effectiveStatus(tool)],
       lookups.siteName(tool.currentSiteId),
-      lookups.employeeName(tool.currentEmployeeId),
+      lookups.userName(tool.currentUserId),
       lookups.companyName(tool.rentalCompanyId),
       tool.ownership === "rented" ? totalToFixed(tool.dailyRentalCost) : "",
       tool.rentalStartDate ? formatShortDate(tool.rentalStartDate) : "",
@@ -135,7 +135,7 @@ export function generateRentalReport(db: DB): void {
       tool.name,
       lookups.companyName(tool.rentalCompanyId) || "—",
       lookups.siteName(tool.currentSiteId) || "—",
-      lookups.employeeName(tool.currentEmployeeId) || "—",
+      lookups.userName(tool.currentUserId) || "—",
       totalToFixed(tool.dailyRentalCost),
       formatShortDate(tool.rentalStartDate),
       formatShortDate(tool.rentalEndDate),
