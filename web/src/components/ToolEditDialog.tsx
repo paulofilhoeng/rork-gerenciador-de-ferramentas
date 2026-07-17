@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, inputClass } from "@/components/shared";
 import { useData } from "@/lib/store";
+import { useAuth } from "@/lib/auth";
 import type { AuditFrequency, MovementType, Tool, ToolMovement, ToolOwnership, ToolStatus } from "@/lib/types";
 import { AUDIT_FREQUENCY_LABEL, OWNERSHIP_LABEL, TOOL_STATUS_LABEL, computeNextAuditDate, newId } from "@/lib/types";
 import { formatShortDate, fromDateInputValue, toDateInputValue } from "@/lib/format";
@@ -15,6 +16,7 @@ interface Props {
 
 export function ToolEditDialog({ tool, open, onClose }: Props) {
   const { db, saveTool, addMovements } = useData();
+  const { isAdmin } = useAuth();
   const isNew = tool === null;
 
   const [name, setName] = useState("");
@@ -75,7 +77,7 @@ export function ToolEditDialog({ tool, open, onClose }: Props) {
       rentalEndDate: fromDateInputValue(rentalEndDate),
       createdAt: tool?.createdAt ?? new Date().toISOString(),
       rentalCompanyId: companyId || null,
-      currentSiteId: siteId || null,
+      currentSiteId: isAdmin ? siteId || null : (tool?.currentSiteId ?? null),
       currentEmployeeId: employeeId || null,
       auditFrequency,
       lastAuditDate: tool?.lastAuditDate ?? null,
@@ -214,12 +216,13 @@ export function ToolEditDialog({ tool, open, onClose }: Props) {
           <p className="text-xs font-bold uppercase tracking-wider text-app-accent">Alocação</p>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Obra / Estoque">
-              <select className={inputClass} value={siteId} onChange={(e) => setSiteId(e.target.value)}>
+              <select className={inputClass} value={siteId} onChange={(e) => setSiteId(e.target.value)} disabled={!isAdmin}>
                 <option value="">Nenhuma</option>
                 {db.sites.map((s) => (
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
               </select>
+              {!isAdmin && <p className="mt-1 text-[11px] text-app-muted/70">Apenas administradores podem alterar a obra</p>}
             </Field>
             <Field label="Responsável">
               <select className={inputClass} value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
