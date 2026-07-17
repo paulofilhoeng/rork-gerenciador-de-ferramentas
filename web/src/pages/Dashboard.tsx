@@ -30,7 +30,7 @@ import { Card, COLOR_TEXT, IconTile, MOVEMENT_ICON, SectionHeader, Separator } f
 import { useData } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import type { StatusColor, Tool } from "@/lib/types";
-import { MOVEMENT_COLOR, MOVEMENT_LABEL, TOOL_STATUS_COLOR, TOOL_STATUS_LABEL, auditDaysRemaining, daysRemaining, effectiveStatus, isAuditDue, isRentalEndingSoon, totalRentalCost } from "@/lib/types";
+import { MOVEMENT_COLOR, MOVEMENT_LABEL, TOOL_STATUS_COLOR, TOOL_STATUS_LABEL, auditDaysRemaining, daysRemaining, effectiveStatus, isAuditDue, isRentalEndingSoon, isRentalTracked, totalRentalCost } from "@/lib/types";
 import { formatCurrency, formatRelativeTime } from "@/lib/format";
 import { generateMovementsReport, generateRentalReport, generateToolsReport } from "@/lib/reports";
 import { cn } from "@/lib/utils";
@@ -107,17 +107,19 @@ export default function Dashboard() {
   }, [db.users, db.tools, db.sites, profile?.id]);
 
   const stats = useMemo(() => {
-    const ownTools = db.tools.filter((t) => t.ownership === "own");
-    const rentedTools = db.tools.filter((t) => t.ownership === "rented");
-    const overdueTools = db.tools.filter((t) => effectiveStatus(t) === "overdue");
-    const endingSoonTools = db.tools.filter((t) => isRentalEndingSoon(t));
-    const inMaintenance = db.tools.filter((t) => t.baseStatus === "maintenance");
-    const inUseTools = db.tools.filter((t) => t.baseStatus === "inUse");
-    const availableTools = db.tools.filter((t) => effectiveStatus(t) === "available");
+    const activeTools = db.tools.filter((t) => t.baseStatus !== "disabled");
+    const ownTools = activeTools.filter((t) => t.ownership === "own");
+    const rentedTools = activeTools.filter((t) => t.ownership === "rented");
+    const clientTools = activeTools.filter((t) => t.ownership === "client");
+    const overdueTools = activeTools.filter((t) => effectiveStatus(t) === "overdue");
+    const endingSoonTools = activeTools.filter((t) => isRentalEndingSoon(t));
+    const inMaintenance = activeTools.filter((t) => t.baseStatus === "maintenance");
+    const inUseTools = activeTools.filter((t) => t.baseStatus === "inUse");
+    const availableTools = activeTools.filter((t) => effectiveStatus(t) === "available");
     const activeSites = db.sites.filter((s) => s.status === "active");
-    const total = rentedTools.reduce((sum, t) => sum + totalRentalCost(t), 0);
-    const auditDueTools = db.tools.filter((t) => isAuditDue(t));
-    return { ownTools, rentedTools, overdueTools, endingSoonTools, inMaintenance, inUseTools, availableTools, activeSites, total, auditDueTools };
+    const total = [...rentedTools, ...clientTools].reduce((sum, t) => sum + totalRentalCost(t), 0);
+    const auditDueTools = activeTools.filter((t) => isAuditDue(t));
+    return { ownTools, rentedTools, clientTools, overdueTools, endingSoonTools, inMaintenance, inUseTools, availableTools, activeSites, total, auditDueTools };
   }, [db.tools, db.sites]);
 
   const recentMovements = useMemo(
@@ -250,6 +252,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
           <StatCard title="Próprias" value={stats.ownTools.length} icon={Wrench} color="accent" />
           <StatCard title="Alugadas" value={stats.rentedTools.length} icon={KeyRound} color="appOrange" />
+          <StatCard title="Clientes" value={stats.clientTools.length} icon={Users} color="blue" />
           <StatCard title="Em Uso" value={stats.inUseTools.length} icon={PlayCircle} color="blue" />
           <StatCard title="Disponíveis" value={stats.availableTools.length} icon={CheckCircle2} color="green" />
           <StatCard title="Locadoras" value={db.companies.length} icon={Building2} color="accent" />
@@ -299,7 +302,7 @@ export default function Dashboard() {
         )}
 
         {/* Rental cost */}
-        {stats.rentedTools.length > 0 && (
+        {(stats.rentedTools.length > 0 || stats.clientTools.length > 0) && (
           <div className="flex flex-col gap-3">
             <SectionHeader title="Custo de Aluguel" />
             <Card className="flex flex-col gap-2.5">
@@ -311,7 +314,7 @@ export default function Dashboard() {
                 <BarChart3 size={32} className="text-app-accent/30" />
               </div>
               <Separator />
-              {stats.rentedTools.slice(0, 4).map((tool) => {
+              {[...stats.rentedTools, ...stats.clientTools].slice(0, 4).map((tool) => {
                 const days = daysRemaining(tool);
                 return (
                   <Link key={tool.id} to={`/ferramentas/${tool.id}`} className="flex items-center gap-2">

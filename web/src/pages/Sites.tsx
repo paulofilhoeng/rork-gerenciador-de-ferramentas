@@ -243,7 +243,7 @@ export function SiteDetail() {
     [db.tools, id],
   );
   const ownTools = tools.filter((t) => t.ownership === "own");
-  const rentedTools = tools.filter((t) => t.ownership === "rented");
+  const rentedTools = tools.filter((t) => t.ownership === "rented" || t.ownership === "client");
 
   if (!site) {
     return (
@@ -358,7 +358,7 @@ export function SiteDetail() {
               return (
                 <div key={tool.id}>
                   <Link to={`/ferramentas/${tool.id}`} className="flex items-center gap-2.5 py-1">
-                    <Wrench size={12} className={`w-7 shrink-0 ${tool.ownership === "rented" ? "text-app-orange" : "text-app-accent"}`} />
+                    <Wrench size={12} className={`w-7 shrink-0 ${tool.ownership === "rented" || tool.ownership === "client" ? "text-app-orange" : "text-app-accent"}`} />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-white">{tool.name}</p>
                       {userName(tool.currentUserId) && (

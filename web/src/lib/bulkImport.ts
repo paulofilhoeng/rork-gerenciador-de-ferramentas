@@ -4,8 +4,8 @@
  */
 
 import * as XLSX from "xlsx";
-import type { AuditFrequency, Tool, ToolOwnership, ToolStatus } from "./types";
-import { AUDIT_FREQUENCY_LABEL, TOOL_STATUS_LABEL, OWNERSHIP_LABEL, computeNextAuditDate, newId } from "./types";
+import type { AuditFrequency, RentalPeriod, Tool, ToolOwnership, ToolStatus } from "./types";
+import { AUDIT_FREQUENCY_LABEL, TOOL_STATUS_LABEL, OWNERSHIP_LABEL, RENTAL_PERIOD_LABEL, computeNextAuditDate, newId } from "./types";
 
 // MARK: - Column definitions
 
@@ -20,7 +20,8 @@ export const IMPORT_COLUMNS = [
   "Responsavel",
   "Frequencia Auditoria *",
   "Data Ultima Auditoria",
-  "Custo Diario (R$)",
+  "Periodicidade",
+  "Valor (R$)",
   "Data Compra",
   "Data Inicio Aluguel",
   "Data Fim Aluguel",
@@ -53,7 +54,8 @@ export function downloadTemplate() {
     "Responsavel": "Joao Pereira",
     "Frequencia Auditoria *": "Mensal",
     "Data Ultima Auditoria": new Date().toISOString().split("T")[0],
-    "Custo Diario (R$)": "",
+    "Periodicidade": "Diario",
+    "Valor (R$)": "",
     "Data Compra": "2024-01-15",
     "Data Inicio Aluguel": "",
     "Data Fim Aluguel": "",
@@ -127,6 +129,8 @@ const STATUS_MAP: Record<string, ToolStatus> = {
   "em uso": "inUse",
   "manutencao": "maintenance",
   "atrasada": "overdue",
+  "desativada": "disabled",
+  "desativado": "disabled",
 };
 
 const OWNERSHIP_MAP: Record<string, ToolOwnership> = {
@@ -134,6 +138,7 @@ const OWNERSHIP_MAP: Record<string, ToolOwnership> = {
   "proprio": "own",
   "alugada": "rented",
   "alugado": "rented",
+  "cliente": "client",
 };
 
 const AUDIT_MAP: Record<string, AuditFrequency> = {
@@ -180,7 +185,8 @@ export function validateRow(
   const userName = getCol(["Responsavel", "Responsável"]);
   const auditFreqStr = getCol(["Frequencia Auditoria *", "Frequencia", "Frequência Auditoria"]);
   const lastAuditStr = getCol(["Data Ultima Auditoria", "Data da Ultima Auditoria", "Data Última Auditoria"]);
-  const dailyCostStr = getCol(["Custo Diario (R$)", "Custo Diario", "Custo"]);
+  const dailyCostStr = getCol(["Custo Diario (R$)", "Custo Diario", "Custo", "Valor (R$)", "Valor"]);
+  const rentalPeriodStr = getCol(["Periodicidade", "Periodo Aluguel"]);
   const purchaseDateStr = getCol(["Data Compra", "Data de Compra"]);
   const rentalStartStr = getCol(["Data Inicio Aluguel", "Data de Inicio"]);
   const rentalEndStr = getCol(["Data Fim Aluguel", "Data de Fim", "Data Devolucao"]);
@@ -268,6 +274,17 @@ export function validateRow(
   // Daily rental cost
   const dailyRentalCost = dailyCostStr ? Number(dailyCostStr.replace(",", ".").replace(/[^0-9.]/g, "")) || 0 : 0;
 
+  // Rental period (defaults to daily for backward compat)
+  const periodMap: Record<string, RentalPeriod> = {
+    "diario": "daily",
+    "diaria": "daily",
+    "semanal": "weekly",
+    "semana": "weekly",
+    "mensal": "monthly",
+    "mes": "monthly",
+  };
+  const rentalPeriod: RentalPeriod = rentalPeriodStr ? (periodMap[rentalPeriodStr.toLowerCase()] ?? "daily") : "daily";
+
   // Compute next audit date from last audit date (or today if not provided)
   const auditBaseDate = lastAuditDate ? new Date(lastAuditDate + "T12:00:00") : new Date();
   const nextAuditDate = computeNextAuditDate(auditFrequency, auditBaseDate);
@@ -283,6 +300,7 @@ export function validateRow(
     notes,
     purchaseDate,
     dailyRentalCost,
+    rentalPeriod,
     rentalStartDate,
     rentalEndDate,
     createdAt: new Date().toISOString(),

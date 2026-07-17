@@ -7,6 +7,7 @@ import {
   TOOL_STATUS_LABEL,
   daysRemaining,
   effectiveStatus,
+  isRentalTracked,
   totalRentalCost,
 } from "./types";
 import { formatDateTime, formatShortDate } from "./format";
@@ -73,11 +74,11 @@ export async function generateToolsReport(db: DB): Promise<void> {
       lookups.siteName(tool.currentSiteId),
       lookups.userName(tool.currentUserId),
       lookups.companyName(tool.rentalCompanyId),
-      tool.ownership === "rented" ? totalToFixed(tool.dailyRentalCost) : "",
+      isRentalTracked(tool) ? totalToFixed(tool.dailyRentalCost) : "",
       tool.rentalStartDate ? formatShortDate(tool.rentalStartDate) : "",
       tool.rentalEndDate ? formatShortDate(tool.rentalEndDate) : "",
       days !== null ? String(days) : "",
-      tool.ownership === "rented" ? totalToFixed(totalRentalCost(tool)) : "",
+      isRentalTracked(tool) ? totalToFixed(totalRentalCost(tool)) : "",
       tool.notes.split(";").join(","),
       String(photos),
       String(videos),
@@ -116,7 +117,7 @@ export async function generateToolsReport(db: DB): Promise<void> {
 export function generateRentalReport(db: DB): void {
   const lookups = buildLookups(db);
   const rented = db.tools
-    .filter((t) => t.ownership === "rented")
+    .filter((t) => isRentalTracked(t))
     .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 
   let csv = "Relatorio de Alugueis\n";

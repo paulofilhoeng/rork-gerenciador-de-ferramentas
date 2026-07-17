@@ -4,8 +4,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Field, inputClass } from "@/components/shared";
 import { useData } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
-import type { AuditFrequency, MovementType, Tool, ToolMovement, ToolOwnership, ToolStatus } from "@/lib/types";
-import { AUDIT_FREQUENCY_LABEL, OWNERSHIP_LABEL, TOOL_STATUS_LABEL, computeNextAuditDate, newId } from "@/lib/types";
+import type { AuditFrequency, MovementType, RentalPeriod, Tool, ToolMovement, ToolOwnership, ToolStatus } from "@/lib/types";
+import { AUDIT_FREQUENCY_LABEL, OWNERSHIP_LABEL, RENTAL_PERIOD_LABEL, TOOL_STATUS_LABEL, computeNextAuditDate, newId } from "@/lib/types";
 import { formatShortDate, fromDateInputValue, toDateInputValue } from "@/lib/format";
 
 interface Props {
@@ -28,6 +28,7 @@ export function ToolEditDialog({ tool, open, onClose }: Props) {
   const [notes, setNotes] = useState("");
   const [purchaseDate, setPurchaseDate] = useState("");
   const [dailyRentalCost, setDailyRentalCost] = useState("");
+  const [rentalPeriod, setRentalPeriod] = useState<RentalPeriod>("daily");
   const [rentalStartDate, setRentalStartDate] = useState("");
   const [rentalEndDate, setRentalEndDate] = useState("");
   const [companyId, setCompanyId] = useState("");
@@ -47,6 +48,7 @@ export function ToolEditDialog({ tool, open, onClose }: Props) {
     setNotes(tool?.notes ?? "");
     setPurchaseDate(toDateInputValue(tool?.purchaseDate ?? null));
     setDailyRentalCost(tool && tool.dailyRentalCost > 0 ? String(tool.dailyRentalCost) : "");
+    setRentalPeriod(tool?.rentalPeriod ?? "daily");
     setRentalStartDate(toDateInputValue(tool?.rentalStartDate ?? null));
     setRentalEndDate(toDateInputValue(tool?.rentalEndDate ?? null));
     setCompanyId(tool?.rentalCompanyId ?? "");
@@ -73,6 +75,7 @@ export function ToolEditDialog({ tool, open, onClose }: Props) {
       notes,
       purchaseDate: fromDateInputValue(purchaseDate),
       dailyRentalCost: Number(dailyRentalCost) || 0,
+      rentalPeriod,
       rentalStartDate: fromDateInputValue(rentalStartDate),
       rentalEndDate: fromDateInputValue(rentalEndDate),
       createdAt: tool?.createdAt ?? new Date().toISOString(),
@@ -169,6 +172,7 @@ export function ToolEditDialog({ tool, open, onClose }: Props) {
               <select className={inputClass} value={ownership} onChange={(e) => setOwnership(e.target.value as ToolOwnership)}>
                 <option value="own">Própria</option>
                 <option value="rented">Alugada</option>
+                <option value="client">Cliente</option>
               </select>
             </Field>
             <Field label="Status">
@@ -177,14 +181,15 @@ export function ToolEditDialog({ tool, open, onClose }: Props) {
                 <option value="inUse">Em Uso</option>
                 <option value="maintenance">Manutenção</option>
                 <option value="overdue">Atrasada</option>
+                <option value="disabled">Desativada</option>
               </select>
             </Field>
           </div>
 
-          {ownership === "rented" ? (
+          {ownership === "rented" || ownership === "client" ? (
             <>
-              <p className="text-xs font-bold uppercase tracking-wider text-app-accent">Aluguel</p>
-              <Field label="Locadora">
+              <p className="text-xs font-bold uppercase tracking-wider text-app-accent">Locadora / Proprietário</p>
+              <Field label={ownership === "client" ? "Cliente (Proprietário)" : "Locadora"}>
                 <select className={inputClass} value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
                   <option value="">Nenhuma</option>
                   {db.companies.map((c) => (
@@ -192,9 +197,18 @@ export function ToolEditDialog({ tool, open, onClose }: Props) {
                   ))}
                 </select>
               </Field>
-              <Field label="Custo diário (R$)">
-                <input type="number" min="0" step="0.01" className={inputClass} value={dailyRentalCost} onChange={(e) => setDailyRentalCost(e.target.value)} placeholder="0,00" />
-              </Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Periodicidade">
+                  <select className={inputClass} value={rentalPeriod} onChange={(e) => setRentalPeriod(e.target.value as RentalPeriod)}>
+                    {(Object.keys(RENTAL_PERIOD_LABEL) as RentalPeriod[]).map((p) => (
+                      <option key={p} value={p}>{RENTAL_PERIOD_LABEL[p]}</option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label={`Valor (${RENTAL_PERIOD_LABEL[rentalPeriod]}) (R$)`}>
+                  <input type="number" min="0" step="0.01" className={inputClass} value={dailyRentalCost} onChange={(e) => setDailyRentalCost(e.target.value)} placeholder="0,00" />
+                </Field>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Data de início">
                   <input type="date" className={inputClass} value={rentalStartDate} onChange={(e) => setRentalStartDate(e.target.value)} />

@@ -22,6 +22,7 @@ import {
   TOOL_STATUS_LABEL,
   daysRemaining,
   effectiveStatus,
+  isRentalTracked,
   totalRentalCost,
 } from "@/lib/types";
 import { formatCurrency, formatDateTime } from "@/lib/format";
@@ -38,12 +39,12 @@ function ToolRow({ tool }: { tool: Tool }) {
     <Link to={`/ferramentas/${tool.id}`}>
       <Card className="flex flex-col gap-2 transition-colors hover:border-app-accent/40">
         <div className="flex items-start gap-3">
-          <IconTile icon={OWNERSHIP_ICON[tool.ownership]} color={tool.ownership === "rented" ? "appOrange" : "accent"} />
+          <IconTile icon={OWNERSHIP_ICON[tool.ownership]} color={isRentalTracked(tool) ? "appOrange" : "accent"} />
           <div className="min-w-0 flex-1">
             <p className="truncate text-base font-semibold text-white">{tool.name}</p>
-            {tool.brand && (
+            {tool.serialNumber && (
               <p className="truncate text-xs text-app-muted">
-                {tool.brand} · {tool.model}
+                {tool.serialNumber}
               </p>
             )}
           </div>
@@ -61,7 +62,7 @@ function ToolRow({ tool }: { tool: Tool }) {
           </span>
         </div>
 
-        {tool.ownership === "rented" && days !== null && (
+        {isRentalTracked(tool) && days !== null && (
           <div
             className={cn(
               "flex items-center gap-1.5 text-[11px] font-semibold",
@@ -91,6 +92,7 @@ export default function Tools() {
   const [search, setSearch] = useState("");
   const [filterOwnership, setFilterOwnership] = useState<ToolOwnership | null>(null);
   const [filterStatus, setFilterStatus] = useState<ToolStatus | null>(null);
+  const [showDisabled, setShowDisabled] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
 
   const filtered = useMemo(() => {
@@ -98,6 +100,9 @@ export default function Tools() {
     return [...db.tools]
       .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))
       .filter((tool) => {
+        // Disabled tools are hidden from default list; shown only via explicit filter or search
+        const isVisibleDisabled = tool.baseStatus === "disabled" && !showDisabled && filterStatus !== "disabled" && q === "";
+        if (isVisibleDisabled) return false;
         const matchesSearch =
           q === "" ||
           tool.name.toLowerCase().includes(q) ||
@@ -107,7 +112,7 @@ export default function Tools() {
         const matchesStatus = filterStatus === null || effectiveStatus(tool) === filterStatus;
         return matchesSearch && matchesOwnership && matchesStatus;
       });
-  }, [db.tools, search, filterOwnership, filterStatus]);
+  }, [db.tools, search, filterOwnership, filterStatus, showDisabled]);
 
   return (
     <PageContainer title="Ferramentas">
@@ -134,6 +139,11 @@ export default function Tools() {
             onClick={() => setFilterOwnership(filterOwnership === "rented" ? null : "rented")}
           />
           <FilterChip
+            label={OWNERSHIP_LABEL.client + "s"}
+            isActive={filterOwnership === "client"}
+            onClick={() => setFilterOwnership(filterOwnership === "client" ? null : "client")}
+          />
+          <FilterChip
             label="Em Uso"
             isActive={filterStatus === "inUse"}
             onClick={() => setFilterStatus(filterStatus === "inUse" ? null : "inUse")}
@@ -152,6 +162,14 @@ export default function Tools() {
             label="Manutenção"
             isActive={filterStatus === "maintenance"}
             onClick={() => setFilterStatus(filterStatus === "maintenance" ? null : "maintenance")}
+          />
+          <FilterChip
+            label="Desativadas"
+            isActive={filterStatus === "disabled" || showDisabled}
+            onClick={() => {
+              setShowDisabled((v) => !v);
+              setFilterStatus(filterStatus === "disabled" ? null : "disabled");
+            }}
           />
         </div>
 

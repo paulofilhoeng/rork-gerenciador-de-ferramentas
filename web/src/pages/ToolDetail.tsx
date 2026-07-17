@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowDownCircle, ArrowLeft, ArrowUpCircle, ClipboardCheck, Clock, Download, Hammer, Trash2, User, Wrench } from "lucide-react";
+import { ArrowDownCircle, ArrowLeft, ArrowUpCircle, ClipboardCheck, Clock, Download, Hammer, Power, Trash2, User, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -44,6 +44,7 @@ import {
   MOVEMENT_COLOR,
   MOVEMENT_LABEL,
   OWNERSHIP_LABEL,
+  RENTAL_PERIOD_LABEL,
   TOOL_STATUS_COLOR,
   TOOL_STATUS_LABEL,
   auditStatusLabel,
@@ -51,8 +52,10 @@ import {
   auditDaysRemaining,
   daysRemaining,
   effectiveStatus,
+  isRentalTracked,
   newId,
   totalRentalCost,
+  dailyCostFromPeriod,
 } from "@/lib/types";
 import { formatCurrency, formatDateTime, formatShortDate } from "@/lib/format";
 import { generateMovementsReport } from "@/lib/reports";
@@ -61,7 +64,7 @@ import { cn } from "@/lib/utils";
 export default function ToolDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { db, deleteTool, addMovements, addAttachments, removeAttachment, startMaintenance, hasPermission } = useData();
+  const { db, deleteTool, saveTool, addMovements, addAttachments, removeAttachment, startMaintenance, hasPermission } = useData();
   const { isAdmin, profile } = useAuth();
 
   const [showEdit, setShowEdit] = useState(false);
@@ -104,6 +107,7 @@ export default function ToolDetail() {
   const site = tool.currentSiteId ? db.sites.find((s) => s.id === tool.currentSiteId) : null;
   const user = tool.currentUserId ? db.users.find((u) => u.id === tool.currentUserId) : null;
   const isInMaintenance = tool.baseStatus === "maintenance";
+  const isDisabled = tool.baseStatus === "disabled";
   const hasActiveMaintenance = maintenanceRecords.some((m) => m.status === "active");
 
   const handleValidationConfirm = async (newAttachments: ToolAttachment[]) => {
@@ -137,6 +141,25 @@ export default function ToolDetail() {
     toast.success("Ferramenta enviada para manutenção");
   };
 
+  const handleReactivate = async () => {
+    await saveTool({ ...tool, baseStatus: "available", statusUpdatedAt: new Date().toISOString() });
+    await addMovements([
+      {
+        id: newId(),
+        toolId: tool.id,
+        type: "statusChanged",
+        description: "Ferramenta reativada",
+        oldValue: "Desativada",
+        newValue: "Disponível",
+        timestamp: new Date().toISOString(),
+        attachmentIds: [],
+        userId: null,
+        userName: "",
+      },
+    ]);
+    toast.success("Ferramenta reativada");
+  };
+
   return (
     <PageContainer
       title={tool.name}
@@ -160,7 +183,7 @@ export default function ToolDetail() {
           <div>
             <p className="text-[22px] font-bold text-white">{TOOL_STATUS_LABEL[status]}</p>
             <p className="text-[13px] font-medium text-app-muted">
-              {tool.ownership === "rented" ? "Ferramenta Alugada" : "Ferramenta Própria"}
+              {isRentalTracked(tool) ? (tool.ownership === "client" ? "Ferramenta de Cliente" : "Ferramenta Alugada") : "Ferramenta Própria"}
             </p>
           </div>
         </div>
@@ -181,22 +204,27 @@ export default function ToolDetail() {
           {tool.lastAuditDate && (
             <DetailRow label="Última auditoria" value={formatDateTime(tool.lastAuditDate)} />
           )}
-          {tool.nextAuditDate && (
+          {tool.nextAuditDate && !isDisabled && (
             <DetailRow label="Próxima auditoria" value={formatShortDate(tool.nextAuditDate)} />
+          )}
+          {isDisabled && (
+            <p className="rounded-lg bg-app-elevated py-2 text-center text-xs font-medium text-app-muted">
+              Ferramenta desativada — auditorias suspensas
+            </p>
           )}
           <div className="flex gap-2 pt-1">
             <button
               type="button"
               onClick={() => setShowAudit(true)}
-              disabled={isInMaintenance}
+              disabled={isInMaintenance || isDisabled}
               className={cn(
                 "flex flex-1 items-center justify-center gap-2 rounded-[10px] py-2.5 text-sm font-semibold transition-colors",
-                isInMaintenance ? "cursor-not-allowed bg-app-elevated text-app-muted/50" : "bg-app-accent/15 text-app-accent hover:bg-app-accent/25",
+                isInMaintenance || isDisabled ? "cursor-not-allowed bg-app-elevated text-app-muted/50" : "bg-app-accent/15 text-app-accent hover:bg-app-accent/25",
               )}
             >
               <ClipboardCheck size={15} /> Realizar Auditoria
             </button>
-            {!hasActiveMaintenance && !isInMaintenance && (
+            {!hasActiveMaintenance && !isInMaintenance && !isDisabled && (
               <button
                 type="button"
                 onClick={() => void handleStartMaintenance()}
@@ -219,11 +247,13 @@ export default function ToolDetail() {
 
         {/* Ownership / rental card */}
         <Card className="flex flex-col gap-2.5">
-          <SectionHeader title={tool.ownership === "rented" ? "Aluguel" : "Propriedade"} />
-          {tool.ownership === "rented" ? (
+          <SectionHeader title={isRentalTracked(tool) ? "Aluguel / Cliente" : "Propriedade"} />
+          {isRentalTracked(tool) ? (
             <>
-              <DetailRow label="Locadora" value={company?.name ?? "—"} />
-              <DetailRow label="Custo diário" value={formatCurrency(tool.dailyRentalCost)} />
+              <DetailRow label={tool.ownership === "client" ? "Cliente (Proprietário)" : "Locadora"} value={company?.name ?? "—"} />
+              <DetailRow label="Periodicidade" value={RENTAL_PERIOD_LABEL[tool.rentalPeriod]} />
+              <DetailRow label={`Valor ${RENTAL_PERIOD_LABEL[tool.rentalPeriod].toLowerCase()}`} value={formatCurrency(tool.dailyRentalCost)} />
+              <DetailRow label="Custo diário equivalente" value={formatCurrency(dailyCostFromPeriod(tool))} />
               <DetailRow label="Início" value={formatShortDate(tool.rentalStartDate)} />
               <DetailRow label="Devolução" value={formatShortDate(tool.rentalEndDate)} />
               {days !== null && (
@@ -413,6 +443,17 @@ export default function ToolDetail() {
             </div>
           )}
         </Card>
+
+        {/* Reactivate (disabled tools, admin only) */}
+        {isDisabled && isAdmin && (
+          <button
+            type="button"
+            onClick={() => void handleReactivate()}
+            className="flex items-center justify-center gap-2 rounded-xl bg-status-green/15 py-3.5 text-[15px] font-semibold text-status-green hover:bg-status-green/25"
+          >
+            <Power size={15} /> Reativar Ferramenta
+          </button>
+        )}
 
         {/* Delete */}
         {isAdmin && (

@@ -1,7 +1,8 @@
 /** Shared domain types for ToolsLoc — now backed by Supabase. */
 
-export type ToolOwnership = "own" | "rented";
-export type ToolStatus = "available" | "inUse" | "maintenance" | "overdue";
+export type ToolOwnership = "own" | "rented" | "client";
+export type ToolStatus = "available" | "inUse" | "maintenance" | "overdue" | "disabled";
+export type RentalPeriod = "daily" | "weekly" | "monthly";
 export type SiteStatus = "active" | "paused" | "completed";
 export type AttachmentType = "photo" | "video";
 export type AttachmentPurpose = "general" | "serialNumber" | "delivery" | "receipt" | "condition" | "invoice";
@@ -43,6 +44,7 @@ export type MovementType =
 export const OWNERSHIP_LABEL: Record<ToolOwnership, string> = {
   own: "Própria",
   rented: "Alugada",
+  client: "Cliente",
 };
 
 export const TOOL_STATUS_LABEL: Record<ToolStatus, string> = {
@@ -50,6 +52,7 @@ export const TOOL_STATUS_LABEL: Record<ToolStatus, string> = {
   inUse: "Em Uso",
   maintenance: "Manutenção",
   overdue: "Atrasada",
+  disabled: "Desativada",
 };
 
 export const TOOL_STATUS_COLOR: Record<ToolStatus, StatusColor> = {
@@ -57,6 +60,20 @@ export const TOOL_STATUS_COLOR: Record<ToolStatus, StatusColor> = {
   inUse: "blue",
   maintenance: "gray",
   overdue: "red",
+  disabled: "gray",
+};
+
+export const RENTAL_PERIOD_LABEL: Record<RentalPeriod, string> = {
+  daily: "Diário",
+  weekly: "Semanal",
+  monthly: "Mensal",
+};
+
+/** Days covered by each rental period — used for cost conversion. */
+export const RENTAL_PERIOD_DAYS: Record<RentalPeriod, number> = {
+  daily: 1,
+  weekly: 7,
+  monthly: 30,
 };
 
 export const SITE_STATUS_LABEL: Record<SiteStatus, string> = {
@@ -182,6 +199,7 @@ export interface Tool {
   notes: string;
   purchaseDate: string | null;
   dailyRentalCost: number;
+  rentalPeriod: RentalPeriod;
   rentalStartDate: string | null;
   rentalEndDate: string | null;
   createdAt: string;
@@ -341,38 +359,53 @@ export interface DB {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/** Whether a tool is rented or belongs to a client (both use rental tracking logic). */
+export function isRentalTracked(tool: Tool): boolean {
+  return tool.ownership === "rented" || tool.ownership === "client";
+}
+
 export function effectiveStatus(tool: Tool): ToolStatus {
-  if (tool.ownership === "rented" && tool.rentalEndDate && new Date(tool.rentalEndDate).getTime() < Date.now()) {
+  if (tool.baseStatus === "disabled") return "disabled";
+  if (isRentalTracked(tool) && tool.rentalEndDate && new Date(tool.rentalEndDate).getTime() < Date.now()) {
     return "overdue";
   }
   return tool.baseStatus;
 }
 
 export function daysRemaining(tool: Tool): number | null {
-  if (tool.ownership !== "rented" || !tool.rentalEndDate) return null;
+  if (!isRentalTracked(tool) || !tool.rentalEndDate) return null;
   const diff = new Date(tool.rentalEndDate).getTime() - Date.now();
   return diff >= 0 ? Math.floor(diff / DAY_MS) : -Math.ceil(-diff / DAY_MS);
 }
 
+/** Convert the period-based rental cost into a daily cost for accumulation. */
+export function dailyCostFromPeriod(tool: Tool): number {
+  const periodDays = RENTAL_PERIOD_DAYS[tool.rentalPeriod] ?? 1;
+  return tool.dailyRentalCost / periodDays;
+}
+
 export function totalRentalCost(tool: Tool): number {
-  if (tool.ownership !== "rented" || !tool.rentalStartDate) return 0;
+  if (!isRentalTracked(tool) || !tool.rentalStartDate) return 0;
   const days = Math.floor((Date.now() - new Date(tool.rentalStartDate).getTime()) / DAY_MS);
-  return Math.max(days, 1) * tool.dailyRentalCost;
+  return Math.max(days, 1) * dailyCostFromPeriod(tool);
 }
 
 export function isRentalEndingSoon(tool: Tool): boolean {
+  if (!isRentalTracked(tool)) return false;
   const days = daysRemaining(tool);
   return days !== null && days >= 0 && days <= 3;
 }
 
-/** Whether the audit due date has passed. */
+/** Whether the audit due date has passed (disabled tools are never due). */
 export function isAuditDue(tool: Tool): boolean {
+  if (tool.baseStatus === "disabled") return false;
   if (!tool.nextAuditDate) return false;
   return new Date(tool.nextAuditDate).getTime() < Date.now();
 }
 
-/** Days until the next audit (negative = overdue). */
+/** Days until the next audit (negative = overdue). Returns null for disabled tools. */
 export function auditDaysRemaining(tool: Tool): number | null {
+  if (tool.baseStatus === "disabled") return null;
   if (!tool.nextAuditDate) return null;
   const diff = new Date(tool.nextAuditDate).getTime() - Date.now();
   return diff >= 0 ? Math.floor(diff / DAY_MS) : -Math.ceil(-diff / DAY_MS);
@@ -387,6 +420,7 @@ export function computeNextAuditDate(frequency: AuditFrequency, from: Date = new
 
 /** Get audit status label for a tool. */
 export function auditStatusLabel(tool: Tool): string {
+  if (tool.baseStatus === "disabled") return "Desativada";
   if (tool.baseStatus === "maintenance") return "Em Manutenção";
   const days = auditDaysRemaining(tool);
   if (days === null) return "Sem auditoria";
@@ -396,6 +430,7 @@ export function auditStatusLabel(tool: Tool): string {
 }
 
 export function auditStatusColor(tool: Tool): StatusColor {
+  if (tool.baseStatus === "disabled") return "gray";
   if (tool.baseStatus === "maintenance") return "gray";
   const days = auditDaysRemaining(tool);
   if (days === null) return "gray";

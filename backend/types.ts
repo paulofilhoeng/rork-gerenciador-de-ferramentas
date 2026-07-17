@@ -508,6 +508,7 @@ export type Database = {
           purchase_date: string | null
           rental_company_id: string | null
           rental_end_date: string | null
+          rental_period: string | null
           rental_start_date: string | null
           serial_number: string | null
           status_updated_at: string | null
@@ -530,6 +531,7 @@ export type Database = {
           purchase_date?: string | null
           rental_company_id?: string | null
           rental_end_date?: string | null
+          rental_period?: string | null
           rental_start_date?: string | null
           serial_number?: string | null
           status_updated_at?: string | null
@@ -552,6 +554,7 @@ export type Database = {
           purchase_date?: string | null
           rental_company_id?: string | null
           rental_end_date?: string | null
+          rental_period?: string | null
           rental_start_date?: string | null
           serial_number?: string | null
           status_updated_at?: string | null

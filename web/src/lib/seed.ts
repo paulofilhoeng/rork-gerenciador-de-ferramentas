@@ -1,5 +1,5 @@
 import type { DB, Tool, ToolMovement } from "./types";
-import { newId, computeNextAuditDate, type AuditFrequency } from "./types";
+import { newId, computeNextAuditDate, type AuditFrequency, type RentalPeriod } from "./types";
 
 function daysAgo(days: number): string {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
@@ -94,6 +94,7 @@ export function buildSeedData(): DB {
     notes: "",
     purchaseDate: null as string | null,
     dailyRentalCost: 0,
+    rentalPeriod: "daily" as RentalPeriod,
     rentalStartDate: null as string | null,
     rentalEndDate: null as string | null,
     rentalCompanyId: null as string | null,

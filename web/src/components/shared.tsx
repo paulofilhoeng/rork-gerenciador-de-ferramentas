@@ -2,6 +2,7 @@ import { memo, type ReactNode } from "react";
 import {
   AlertTriangle,
   ArrowLeftRight,
+  Ban,
   CheckCircle2,
   ClipboardCheck,
   Hammer,
@@ -11,6 +12,7 @@ import {
   PlusCircle,
   RefreshCw,
   StickyNote,
+  User,
   UserMinus,
   UserPlus,
   Wrench,
@@ -61,11 +63,13 @@ export const TOOL_STATUS_ICON: Record<ToolStatus, LucideIcon> = {
   inUse: PlayCircle,
   maintenance: Wrench,
   overdue: AlertTriangle,
+  disabled: Ban,
 };
 
 export const OWNERSHIP_ICON: Record<ToolOwnership, LucideIcon> = {
   own: Wrench,
   rented: KeyRound,
+  client: User,
 };
 
 export const MOVEMENT_ICON: Record<MovementType, LucideIcon> = {

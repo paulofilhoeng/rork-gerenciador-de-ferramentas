@@ -18,7 +18,7 @@ export default function Settings() {
   const [editNameOpen, setEditNameOpen] = useState(false);
   const [editPasswordOpen, setEditPasswordOpen] = useState(false);
 
-  const scheduledCount = db.tools.filter((t) => t.ownership === "rented" && t.rentalEndDate).length;
+  const scheduledCount = db.tools.filter((t) => (t.ownership === "rented" || t.ownership === "client") && t.rentalEndDate).length;
 
   const toggleNotifications = async (enabled: boolean) => {
     if (!enabled) {

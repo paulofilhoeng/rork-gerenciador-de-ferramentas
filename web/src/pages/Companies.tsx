@@ -121,7 +121,7 @@ export default function Companies() {
       .filter((c) => q === "" || c.name.toLowerCase().includes(q) || c.contactPerson.toLowerCase().includes(q));
   }, [db.companies, search]);
 
-  const rentalCount = (id: string) => db.tools.filter((t) => t.rentalCompanyId === id && t.ownership === "rented").length;
+  const rentalCount = (id: string) => db.tools.filter((t) => t.rentalCompanyId === id && (t.ownership === "rented" || t.ownership === "client")).length;
   const overdueCount = (id: string) => db.tools.filter((t) => t.rentalCompanyId === id && effectiveStatus(t) === "overdue").length;
 
   return (
@@ -178,7 +178,7 @@ export function CompanyDetail() {
   const rentedTools = useMemo(
     () =>
       db.tools
-        .filter((t) => t.rentalCompanyId === id && t.ownership === "rented")
+        .filter((t) => t.rentalCompanyId === id && (t.ownership === "rented" || t.ownership === "client"))
         .sort((a, b) => a.name.localeCompare(b.name, "pt-BR")),
     [db.tools, id],
   );
