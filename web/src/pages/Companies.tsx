@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { PageContainer } from "@/components/Layout";
 import { Card, EmptyState, Fab, Field, IconTile, SearchInput, SectionHeader, Separator, inputClass } from "@/components/shared";
 import { useData } from "@/lib/store";
+import { useAuth } from "@/lib/auth";
 import type { RentalCompany } from "@/lib/types";
 import { daysRemaining, effectiveStatus, newId } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -169,6 +170,7 @@ export function CompanyDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { db, deleteCompany } = useData();
+  const { isAdmin } = useAuth();
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
 
@@ -287,13 +289,15 @@ export function CompanyDetail() {
           )}
         </Card>
 
-        <button
-          type="button"
-          onClick={() => setShowDelete(true)}
-          className="flex items-center justify-center gap-2 rounded-xl bg-status-red/10 py-3.5 text-[15px] font-semibold text-status-red hover:bg-status-red/20"
-        >
-          <Trash2 size={15} /> Excluir Locadora
-        </button>
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={() => setShowDelete(true)}
+            className="flex items-center justify-center gap-2 rounded-xl bg-status-red/10 py-3.5 text-[15px] font-semibold text-status-red hover:bg-status-red/20"
+          >
+            <Trash2 size={15} /> Excluir Locadora
+          </button>
+        )}
       </div>
 
       <CompanyEditDialog company={company} open={showEdit} onClose={() => setShowEdit(false)} />

@@ -415,9 +415,11 @@ export default function ToolDetail() {
         </Card>
 
         {/* Delete */}
-        <button type="button" onClick={() => setShowDelete(true)} className="flex items-center justify-center gap-2 rounded-xl bg-status-red/10 py-3.5 text-[15px] font-semibold text-status-red hover:bg-status-red/20">
-          <Trash2 size={15} /> Excluir Ferramenta
-        </button>
+        {isAdmin && (
+          <button type="button" onClick={() => setShowDelete(true)} className="flex items-center justify-center gap-2 rounded-xl bg-status-red/10 py-3.5 text-[15px] font-semibold text-status-red hover:bg-status-red/20">
+            <Trash2 size={15} /> Excluir Ferramenta
+          </button>
+        )}
       </div>
 
       <ToolEditDialog tool={tool} open={showEdit} onClose={() => setShowEdit(false)} />
