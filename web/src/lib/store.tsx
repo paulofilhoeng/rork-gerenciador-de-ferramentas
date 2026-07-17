@@ -248,6 +248,7 @@ interface DataContextValue {
   toggleMovementType: (id: string, isActive: boolean) => Promise<void>;
   savePermission: (siteId: string, userId: string, movementTypeId: string, allowed: boolean) => Promise<void>;
   hasPermission: (userId: string, siteId: string | null, movementTypeName: string) => boolean;
+  bulkInsertTools: (tools: Tool[]) => Promise<number>;
 }
 
 function useDataHook() {
@@ -1014,6 +1015,42 @@ function useDataHook() {
     [db.movementTypes, db.siteUserPermissions],
   );
 
+  const bulkInsertTools = useCallback(
+    async (tools: Tool[]): Promise<number> => {
+      if (tools.length === 0) return 0;
+      const rows = tools.map((tool) => ({
+        id: tool.id,
+        name: tool.name,
+        brand: tool.brand,
+        model: tool.model,
+        serial_number: tool.serialNumber,
+        ownership: tool.ownership,
+        base_status: tool.baseStatus,
+        notes: tool.notes,
+        purchase_date: tool.purchaseDate,
+        daily_rental_cost: tool.dailyRentalCost,
+        rental_start_date: tool.rentalStartDate,
+        rental_end_date: tool.rentalEndDate,
+        rental_company_id: tool.rentalCompanyId,
+        current_site_id: tool.currentSiteId,
+        current_employee_id: tool.currentEmployeeId,
+        audit_frequency: tool.auditFrequency,
+        last_audit_date: tool.lastAuditDate,
+        next_audit_date: tool.nextAuditDate ?? computeNextAuditDate(tool.auditFrequency),
+        status_updated_at: new Date().toISOString(),
+      }));
+      const { error } = await supabase.from("tools").insert(rows);
+      if (error) {
+        console.error("Bulk insert failed", error);
+        return 0;
+      }
+      // Log the bulk import as a single activity
+      await logActivity("bulkImport", "tool", "bulk-import", `${tools.length} ferramenta(s) importada(s)`, undefined, { count: tools.length });
+      return tools.length;
+    },
+    [logActivity],
+  );
+
   return {
     db,
     loading,
@@ -1040,6 +1077,7 @@ function useDataHook() {
     toggleMovementType,
     savePermission,
     hasPermission,
+    bulkInsertTools,
   };
 }
 

@@ -19,7 +19,8 @@ export type ActivityAction =
   | "maintenance"
   | "roleChange"
   | "permissionChange"
-  | "movementTypeManage";
+  | "movementTypeManage"
+  | "bulkImport";
 
 export type MovementType =
   | "created"
@@ -154,6 +155,7 @@ export const ACTIVITY_ACTION_LABEL: Record<ActivityAction, string> = {
   roleChange: "Alteração de Nível",
   permissionChange: "Alteração de Permissão",
   movementTypeManage: "Gestão de Tipo de Movimentação",
+  bulkImport: "Importação de Inventário",
 };
 
 export const ACTIVITY_ACTION_COLOR: Record<ActivityAction, StatusColor> = {
@@ -166,6 +168,7 @@ export const ACTIVITY_ACTION_COLOR: Record<ActivityAction, StatusColor> = {
   roleChange: "orange",
   permissionChange: "blue",
   movementTypeManage: "orange",
+  bulkImport: "green",
 };
 
 export interface Tool {
