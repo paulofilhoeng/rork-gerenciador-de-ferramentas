@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { ClipboardList, Hammer, LayoutGrid, LogOut, Settings, Shield, Users, ArrowLeftRight, Upload, Wrench } from "lucide-react";
+import { ClipboardList, Hammer, HelpCircle, LayoutGrid, LogOut, Settings, Shield, Users, ArrowLeftRight, Upload, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
 import { USER_ROLE_LABEL } from "@/lib/types";
@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { to: "/locadoras", label: "Locadoras", icon: Shield },
   { to: "/obras", label: "Obras", icon: Hammer },
   { to: "/relatorios", label: "Relatórios", icon: ClipboardList },
+  { to: "/ajuda", label: "Ajuda", icon: HelpCircle },
   { to: "/ajustes", label: "Ajustes", icon: Settings },
 ];
 

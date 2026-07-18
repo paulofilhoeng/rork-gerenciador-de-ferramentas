@@ -19,6 +19,7 @@ import MovementTypes from "./pages/MovementTypes";
 import BulkImport from "./pages/BulkImport";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
+import Help from "./pages/Help";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -87,6 +88,7 @@ function AppRoutes() {
           <Route path="/usuarios" element={<ProtectedRoute adminOnly><Users /></ProtectedRoute>} />
           <Route path="/tipos-movimentacao" element={<ProtectedRoute adminOnly><MovementTypes /></ProtectedRoute>} />
           <Route path="/importacao" element={<ProtectedRoute adminOnly><BulkImport /></ProtectedRoute>} />
+          <Route path="/ajuda" element={<ProtectedRoute><Help /></ProtectedRoute>} />
           <Route path="/ajustes" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
           <Route path="*" element={<NotFound />} />
         </Routes>
