@@ -292,8 +292,6 @@ function useDataHook() {
 
         if (cancelled) return;
 
-        if (cancelled) return;
-
         // Link movement attachment IDs
         const movements = (movementsRes.data ?? []).map((r) => {
           const m = mapMovement(r as Record<string, unknown>);
@@ -408,7 +406,7 @@ function useDataHook() {
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "movement_types" }, (payload) => {
         setDB((prev) => {
-          if (payload.eventType === "DELETE") return { ...prev, movementTypes: prev.movementTypes.filter((m) => m.id !== (payload.old as Record<string, unknown>).id) };
+          if (payload.eventType === "DELETE") return { ...prev, movementTypes: prev.movementTypes.filter((m) => m.id === (payload.old as Record<string, unknown>).id) };
           const newRow = mapMovementType(payload.new as Record<string, unknown>);
           const exists = prev.movementTypes.some((m) => m.id === newRow.id);
           return { ...prev, movementTypes: exists ? prev.movementTypes.map((m) => (m.id === newRow.id ? newRow : m)) : [...prev.movementTypes, newRow] };
@@ -430,37 +428,34 @@ function useDataHook() {
     };
   }, [user]);
 
-  // Logging helper
+  // Logging helper — fire-and-forget; failures don't break the user flow.
   const logActivity = useCallback(
-    async (
-      action: ActivityAction,
-      entityType: string,
-      entityId: string,
-      entityName: string,
-      oldValues?: Record<string, unknown>,
-      newValues?: Record<string, unknown>,
-      siteId?: string | null,
-    ) => {
-      if (!user || !profile) return;
-      await supabase.from("activity_logs").insert({
-        user_id: user.id,
-        user_email: profile.email,
-        user_name: profile.name || profile.email,
-        action,
-        entity_type: entityType,
-        entity_id: entityId,
-        entity_name: entityName,
-        old_values: oldValues ?? null,
-        new_values: newValues ?? null,
-        site_id: siteId ?? null,
-      });
+    (action: ActivityAction, entityType: string, entityId: string, entityName: string, oldValues?: Record<string, unknown>, newValues?: Record<string, unknown>, siteId?: string | null) => {
+      if (!user || !profile) return Promise.resolve();
+      return supabase
+        .from("activity_logs")
+        .insert({
+          user_id: user.id,
+          user_email: profile.email,
+          user_name: profile.name || profile.email,
+          action,
+          entity_type: entityType,
+          entity_id: entityId,
+          entity_name: entityName,
+          old_values: oldValues ?? null,
+          new_values: newValues ?? null,
+          site_id: siteId ?? null,
+        })
+        .then(({ error }: { error: { message: string } | null }) => {
+          if (error) console.error("activity_logs insert failed", error.message);
+        });
     },
     [user, profile],
   );
 
   const insertMovements = useCallback(
-    async (movements: ToolMovement[]) => {
-      if (movements.length === 0) return;
+    (movements: ToolMovement[]) => {
+      if (movements.length === 0) return Promise.resolve();
       const rows = movements.map((m) => ({
         id: m.id,
         tool_id: m.toolId,
@@ -472,17 +467,34 @@ function useDataHook() {
         user_id: user?.id ?? null,
         user_name: profile?.name ?? profile?.email ?? "",
       }));
-      const { error } = await supabase.from("tool_movements").insert(rows);
-      if (error) console.error("Failed to insert movements", error);
+      return supabase
+        .from("tool_movements")
+        .insert(rows)
+        .then(({ error }: { error: { message: string } | null }) => {
+          if (error) console.error("tool_movements insert failed", error.message);
+        });
     },
     [user, profile],
   );
 
   const saveTool = useCallback(
     async (tool: Tool) => {
-      const { data: existingTool } = await supabase.from("tools").select("id, base_status").eq("id", tool.id).maybeSingle();
-      const isNew = !existingTool;
-      const statusChanged = !isNew && (existingTool as Record<string, unknown>)?.base_status !== tool.baseStatus;
+      // Optimistic update first — UI reflects the change instantly.
+      const existing = db.tools.find((t) => t.id === tool.id);
+      const isNew = !existing;
+      const statusChanged = !isNew && existing?.baseStatus !== tool.baseStatus;
+      const nowIso = new Date().toISOString();
+
+      const optimisticTool: Tool = {
+        ...tool,
+        statusUpdatedAt: statusChanged ? nowIso : (tool.statusUpdatedAt ?? (isNew ? nowIso : null)),
+        nextAuditDate: tool.nextAuditDate ?? computeNextAuditDate(tool.auditFrequency),
+      };
+
+      setDB((prev) => ({
+        ...prev,
+        tools: isNew ? [...prev.tools, optimisticTool] : prev.tools.map((t) => (t.id === tool.id ? optimisticTool : t)),
+      }));
 
       const row = {
         id: tool.id,
@@ -504,125 +516,183 @@ function useDataHook() {
         audit_frequency: tool.auditFrequency,
         last_audit_date: tool.lastAuditDate,
         next_audit_date: tool.nextAuditDate ?? computeNextAuditDate(tool.auditFrequency),
-        status_updated_at: statusChanged ? new Date().toISOString() : isNew ? new Date().toISOString() : undefined,
+        status_updated_at: statusChanged ? nowIso : isNew ? nowIso : undefined,
       };
 
-      const { error } = await supabase.from("tools").upsert(row);
-      if (error) {
-        toast.error("Falha ao salvar ferramenta");
-        console.error(error);
-        return;
-      }
+      // Run all side-effects concurrently — single round-trip latency.
+      const [upsertRes] = await Promise.all([
+        supabase.from("tools").upsert(row),
+        insertMovements(
+          isNew
+            ? [{
+                id: newId(),
+                toolId: tool.id,
+                type: "created",
+                description: "Ferramenta criada",
+                oldValue: "",
+                newValue: "",
+                timestamp: nowIso,
+                attachmentIds: [],
+                userId: user?.id ?? null,
+                userName: profile?.name ?? "",
+              }]
+            : [],
+        ),
+        logActivity(
+          isNew ? "create" : "edit",
+          "tool",
+          tool.id,
+          tool.name,
+          undefined,
+          { name: tool.name, ownership: tool.ownership },
+        ),
+      ]);
 
-      if (isNew) {
-        await insertMovements([
-          {
-            id: newId(),
-            toolId: tool.id,
-            type: "created",
-            description: "Ferramenta criada",
-            oldValue: "",
-            newValue: "",
-            timestamp: new Date().toISOString(),
-            attachmentIds: [],
-            userId: user?.id ?? null,
-            userName: profile?.name ?? "",
-          },
-        ]);
-        await logActivity("create", "tool", tool.id, tool.name, undefined, { name: tool.name, ownership: tool.ownership });
-      } else {
-        await logActivity("edit", "tool", tool.id, tool.name, undefined, { name: tool.name });
+      if (upsertRes.error) {
+        // Rollback to previous state; realtime won't fire since the server rejected.
+        setDB((prev) => ({
+          ...prev,
+          tools: isNew ? prev.tools.filter((t) => t.id !== tool.id) : prev.tools.map((t) => (t.id === tool.id ? existing! : t)),
+        }));
+        toast.error("Falha ao salvar ferramenta");
+        console.error(upsertRes.error);
       }
     },
-    [insertMovements, logActivity, user, profile],
+    [db.tools, insertMovements, logActivity, user, profile],
   );
 
   const deleteTool = useCallback(
     async (id: string) => {
       const tool = db.tools.find((t) => t.id === id);
-      const { error } = await supabase.from("tools").delete().eq("id", id);
-      if (error) {
+      if (!tool) return;
+
+      setDB((prev) => ({ ...prev, tools: prev.tools.filter((t) => t.id !== id) }));
+
+      const [delRes] = await Promise.all([
+        supabase.from("tools").delete().eq("id", id),
+        tool ? logActivity("delete", "tool", id, tool.name, { name: tool.name }) : Promise.resolve(),
+      ]);
+
+      if (delRes.error) {
+        setDB((prev) => ({ ...prev, tools: [...prev.tools, tool] }));
         toast.error("Falha ao excluir ferramenta");
-        return;
       }
-      if (tool) await logActivity("delete", "tool", id, tool.name, { name: tool.name });
     },
     [db.tools, logActivity],
   );
 
   const saveCompany = useCallback(
     async (company: RentalCompany) => {
-      const { data: existing } = await supabase.from("rental_companies").select("id").eq("id", company.id).maybeSingle();
-      const isNew = !existing;
-      const { error } = await supabase.from("rental_companies").upsert({
-        id: company.id,
-        name: company.name,
-        cnpj: company.cnpj,
-        phone: company.phone,
-        email: company.email,
-        address: company.address,
-        contact_person: company.contactPerson,
-      });
-      if (error) {
+      const isNew = !db.companies.some((c) => c.id === company.id);
+
+      setDB((prev) => ({
+        ...prev,
+        companies: isNew ? [...prev.companies, { ...company, createdAt: company.createdAt ?? new Date().toISOString() }] : prev.companies.map((c) => (c.id === company.id ? company : c)),
+      }));
+
+      const [upsertRes] = await Promise.all([
+        supabase.from("rental_companies").upsert({
+          id: company.id,
+          name: company.name,
+          cnpj: company.cnpj,
+          phone: company.phone,
+          email: company.email,
+          address: company.address,
+          contact_person: company.contactPerson,
+        }),
+        logActivity(isNew ? "create" : "edit", "company", company.id, company.name),
+      ]);
+
+      if (upsertRes.error) {
+        setDB((prev) => ({
+          ...prev,
+          companies: isNew ? prev.companies.filter((c) => c.id !== company.id) : prev.companies.map((c) => (c.id === company.id ? db.companies.find((old) => old.id === company.id) ?? c : c)),
+        }));
         toast.error("Falha ao salvar locadora");
-        return;
       }
-      await logActivity(isNew ? "create" : "edit", "company", company.id, company.name);
     },
-    [logActivity],
+    [db.companies, logActivity],
   );
 
   const deleteCompany = useCallback(
     async (id: string) => {
       const company = db.companies.find((c) => c.id === id);
-      const { error } = await supabase.from("rental_companies").delete().eq("id", id);
-      if (error) {
+      if (!company) return;
+
+      setDB((prev) => ({ ...prev, companies: prev.companies.filter((c) => c.id !== id) }));
+
+      const [delRes] = await Promise.all([
+        supabase.from("rental_companies").delete().eq("id", id),
+        logActivity("delete", "company", id, company.name),
+      ]);
+
+      if (delRes.error) {
+        setDB((prev) => ({ ...prev, companies: [...prev.companies, company] }));
         toast.error("Falha ao excluir locadora");
-        return;
       }
-      if (company) await logActivity("delete", "company", id, company.name);
     },
     [db.companies, logActivity],
   );
 
   const saveSite = useCallback(
     async (site: ConstructionSite) => {
-      const { data: existing } = await supabase.from("construction_sites").select("id").eq("id", site.id).maybeSingle();
-      const isNew = !existing;
-      const { error } = await supabase.from("construction_sites").upsert({
-        id: site.id,
-        name: site.name,
-        address: site.address,
-        responsible_name: site.responsibleName,
-        responsible_phone: site.responsiblePhone,
-        status: site.status,
-        start_date: site.startDate,
-        notes: site.notes,
-      });
-      if (error) {
+      const isNew = !db.sites.some((s) => s.id === site.id);
+
+      setDB((prev) => ({
+        ...prev,
+        sites: isNew ? [...prev.sites, { ...site, createdAt: site.createdAt ?? new Date().toISOString() }] : prev.sites.map((s) => (s.id === site.id ? site : s)),
+      }));
+
+      const [upsertRes] = await Promise.all([
+        supabase.from("construction_sites").upsert({
+          id: site.id,
+          name: site.name,
+          address: site.address,
+          responsible_name: site.responsibleName,
+          responsible_phone: site.responsiblePhone,
+          status: site.status,
+          start_date: site.startDate,
+          notes: site.notes,
+        }),
+        logActivity(isNew ? "create" : "edit", "site", site.id, site.name, undefined, undefined, site.id),
+      ]);
+
+      if (upsertRes.error) {
+        setDB((prev) => ({
+          ...prev,
+          sites: isNew ? prev.sites.filter((s) => s.id !== site.id) : prev.sites.map((s) => (s.id === site.id ? db.sites.find((old) => old.id === site.id) ?? s : s)),
+        }));
         toast.error("Falha ao salvar obra");
-        return;
       }
-      await logActivity(isNew ? "create" : "edit", "site", site.id, site.name, undefined, undefined, site.id);
     },
-    [logActivity],
+    [db.sites, logActivity],
   );
 
   const deleteSite = useCallback(
     async (id: string) => {
       const site = db.sites.find((s) => s.id === id);
-      const { error } = await supabase.from("construction_sites").delete().eq("id", id);
-      if (error) {
+      if (!site) return;
+
+      setDB((prev) => ({ ...prev, sites: prev.sites.filter((s) => s.id !== id) }));
+
+      const [delRes] = await Promise.all([
+        supabase.from("construction_sites").delete().eq("id", id),
+        logActivity("delete", "site", id, site.name, undefined, undefined, id),
+      ]);
+
+      if (delRes.error) {
+        setDB((prev) => ({ ...prev, sites: [...prev.sites, site] }));
         toast.error("Falha ao excluir obra");
-        return;
       }
-      if (site) await logActivity("delete", "site", id, site.name, undefined, undefined, id);
     },
     [db.sites, logActivity],
   );
 
   const addMovements = useCallback(
     async (movements: ToolMovement[]) => {
+      if (movements.length === 0) return;
+      // Optimistic
+      setDB((prev) => ({ ...prev, movements: [...prev.movements, ...movements] }));
       await insertMovements(movements);
     },
     [insertMovements],
@@ -630,6 +700,7 @@ function useDataHook() {
 
   const addAttachments = useCallback(async (attachments: ToolAttachment[]) => {
     if (attachments.length === 0) return;
+    setDB((prev) => ({ ...prev, attachments: [...prev.attachments, ...attachments] }));
     const rows = attachments.map((a) => ({
       id: a.id,
       tool_id: a.toolId,
@@ -641,53 +712,77 @@ function useDataHook() {
     }));
     const { error } = await supabase.from("tool_attachments").insert(rows);
     if (error) {
+      setDB((prev) => ({ ...prev, attachments: prev.attachments.filter((a) => !attachments.some((na) => na.id === a.id)) }));
       toast.error("Falha ao salvar anexo");
       console.error(error);
     }
   }, []);
 
   const removeAttachment = useCallback(async (id: string) => {
+    const prev = db.attachments.find((a) => a.id === id);
+    setDB((prevDB) => ({ ...prevDB, attachments: prevDB.attachments.filter((a) => a.id !== id) }));
     const { error } = await supabase.from("tool_attachments").delete().eq("id", id);
-    if (error) toast.error("Falha ao remover anexo");
-  }, []);
+    if (error) {
+      if (prev) setDB((prevDB) => ({ ...prevDB, attachments: [...prevDB.attachments, prev] }));
+      toast.error("Falha ao remover anexo");
+    }
+  }, [db.attachments]);
 
   const confirmAudit = useCallback(
     async (toolId: string) => {
       const tool = db.tools.find((t) => t.id === toolId);
       if (!tool) return;
       const now = new Date();
+      const nowIso = now.toISOString();
       const nextDate = computeNextAuditDate(tool.auditFrequency, now);
+      const auditId = newId();
+      const movementId = newId();
 
-      await supabase.from("audit_records").insert({
-        tool_id: toolId,
-        user_id: user?.id ?? null,
-        user_name: profile?.name ?? "",
+      const newAudit: AuditRecord = {
+        id: auditId,
+        toolId,
+        userId: user?.id ?? null,
+        userName: profile?.name ?? "",
         status: "confirmed",
-        audit_date: now.toISOString(),
-        next_audit_date: nextDate,
-      });
+        damageDescription: "",
+        auditDate: nowIso,
+        nextAuditDate: nextDate,
+      };
+      const newMovement: ToolMovement = {
+        id: movementId,
+        toolId,
+        type: "auditConfirmed",
+        description: "Auditoria confirmada — ferramenta conferida no local",
+        oldValue: "",
+        newValue: "",
+        timestamp: nowIso,
+        attachmentIds: [],
+        userId: user?.id ?? null,
+        userName: profile?.name ?? "",
+      };
 
-      await supabase
-        .from("tools")
-        .update({ last_audit_date: now.toISOString(), next_audit_date: nextDate })
-        .eq("id", toolId);
+      // Optimistic
+      setDB((prev) => ({
+        ...prev,
+        audits: [...prev.audits, newAudit],
+        movements: [...prev.movements, newMovement],
+        tools: prev.tools.map((t) => (t.id === toolId ? { ...t, lastAuditDate: nowIso, nextAuditDate: nextDate } : t)),
+      }));
 
-      await insertMovements([
-        {
-          id: newId(),
-          toolId,
-          type: "auditConfirmed",
-          description: "Auditoria confirmada — ferramenta conferida no local",
-          oldValue: "",
-          newValue: "",
-          timestamp: now.toISOString(),
-          attachmentIds: [],
-          userId: user?.id ?? null,
-          userName: profile?.name ?? "",
-        },
+      await Promise.all([
+        supabase.from("audit_records").insert({
+          id: auditId,
+          tool_id: toolId,
+          user_id: user?.id ?? null,
+          user_name: profile?.name ?? "",
+          status: "confirmed",
+          audit_date: nowIso,
+          next_audit_date: nextDate,
+        }),
+        supabase.from("tools").update({ last_audit_date: nowIso, next_audit_date: nextDate }).eq("id", toolId),
+        insertMovements([newMovement]),
+        logActivity("audit", "audit", toolId, tool.name, undefined, { status: "confirmed" }, tool.currentSiteId),
       ]);
-
-      await logActivity("audit", "audit", toolId, tool.name, undefined, { status: "confirmed" }, tool.currentSiteId);
     },
     [db.tools, user, profile, insertMovements, logActivity],
   );
@@ -697,44 +792,64 @@ function useDataHook() {
       const tool = db.tools.find((t) => t.id === toolId);
       if (!tool) return;
       const now = new Date();
+      const nowIso = now.toISOString();
       const nextDate = computeNextAuditDate(tool.auditFrequency, now);
+      const auditId = newId();
+      const movementId = newId();
 
-      await supabase.from("audit_records").insert({
-        tool_id: toolId,
-        user_id: user?.id ?? null,
-        user_name: profile?.name ?? "",
+      const newAudit: AuditRecord = {
+        id: auditId,
+        toolId,
+        userId: user?.id ?? null,
+        userName: profile?.name ?? "",
         status: "damaged",
-        damage_description: description,
-        audit_date: now.toISOString(),
-        next_audit_date: nextDate,
-      });
+        damageDescription: description,
+        auditDate: nowIso,
+        nextAuditDate: nextDate,
+      };
+      const newMovement: ToolMovement = {
+        id: movementId,
+        toolId,
+        type: "auditDamaged",
+        description: `Avaria registrada: ${description}`,
+        oldValue: tool.baseStatus,
+        newValue: "maintenance",
+        timestamp: nowIso,
+        attachmentIds: [],
+        userId: user?.id ?? null,
+        userName: profile?.name ?? "",
+      };
 
-      await supabase
-        .from("tools")
-        .update({
-          base_status: "maintenance",
-          status_updated_at: now.toISOString(),
-          last_audit_date: now.toISOString(),
+      // Optimistic
+      setDB((prev) => ({
+        ...prev,
+        audits: [...prev.audits, newAudit],
+        movements: [...prev.movements, newMovement],
+        tools: prev.tools.map((t) =>
+          t.id === toolId
+            ? { ...t, baseStatus: "maintenance", statusUpdatedAt: nowIso, lastAuditDate: nowIso, nextAuditDate: nextDate }
+            : t,
+        ),
+      }));
+
+      await Promise.all([
+        supabase.from("audit_records").insert({
+          id: auditId,
+          tool_id: toolId,
+          user_id: user?.id ?? null,
+          user_name: profile?.name ?? "",
+          status: "damaged",
+          damage_description: description,
+          audit_date: nowIso,
           next_audit_date: nextDate,
-        })
-        .eq("id", toolId);
-
-      await insertMovements([
-        {
-          id: newId(),
-          toolId,
-          type: "auditDamaged",
-          description: `Avaria registrada: ${description}`,
-          oldValue: tool.baseStatus,
-          newValue: "maintenance",
-          timestamp: now.toISOString(),
-          attachmentIds: [],
-          userId: user?.id ?? null,
-          userName: profile?.name ?? "",
-        },
+        }),
+        supabase
+          .from("tools")
+          .update({ base_status: "maintenance", status_updated_at: nowIso, last_audit_date: nowIso, next_audit_date: nextDate })
+          .eq("id", toolId),
+        insertMovements([newMovement]),
+        logActivity("audit", "audit", toolId, tool.name, { status: tool.baseStatus }, { status: "damaged", description }, tool.currentSiteId),
       ]);
-
-      await logActivity("audit", "audit", toolId, tool.name, { status: tool.baseStatus }, { status: "damaged", description }, tool.currentSiteId);
     },
     [db.tools, user, profile, insertMovements, logActivity],
   );
@@ -744,35 +859,60 @@ function useDataHook() {
       const tool = db.tools.find((t) => t.id === toolId);
       if (!tool) return;
       const now = new Date();
-
-      await supabase.from("maintenance_records").insert({
-        tool_id: toolId,
-        user_id: user?.id ?? null,
-        user_name: profile?.name ?? "",
-        start_date: now.toISOString(),
-        status: "active",
-      });
-
+      const nowIso = now.toISOString();
+      const maintenanceId = newId();
+      const movementId = newId();
       const oldSite = tool.currentSiteId;
-      await supabase.from("tools").update({ base_status: "maintenance", status_updated_at: now.toISOString(), current_site_id: null }).eq("id", toolId);
-
       const siteName = oldSite ? db.sites.find((s) => s.id === oldSite)?.name ?? "—" : "—";
-      await insertMovements([
-        {
-          id: newId(),
-          toolId,
-          type: "maintenanceStarted",
-          description: "Transferida para manutenção",
-          oldValue: siteName,
-          newValue: "Manutenção",
-          timestamp: now.toISOString(),
-          attachmentIds: [],
-          userId: user?.id ?? null,
-          userName: profile?.name ?? "",
-        },
-      ]);
 
-      await logActivity("maintenance", "maintenance", toolId, tool.name, { status: tool.baseStatus, site: oldSite }, { status: "maintenance" }, oldSite);
+      const newMaintenance: MaintenanceRecord = {
+        id: maintenanceId,
+        toolId,
+        userId: user?.id ?? null,
+        userName: profile?.name ?? "",
+        repairCost: 0,
+        invoiceNumber: "",
+        invoiceAttachmentId: null,
+        startDate: nowIso,
+        returnDate: null,
+        status: "active",
+      };
+      const newMovement: ToolMovement = {
+        id: movementId,
+        toolId,
+        type: "maintenanceStarted",
+        description: "Transferida para manutenção",
+        oldValue: siteName,
+        newValue: "Manutenção",
+        timestamp: nowIso,
+        attachmentIds: [],
+        userId: user?.id ?? null,
+        userName: profile?.name ?? "",
+      };
+
+      // Optimistic
+      setDB((prev) => ({
+        ...prev,
+        maintenance: [...prev.maintenance, newMaintenance],
+        movements: [...prev.movements, newMovement],
+        tools: prev.tools.map((t) =>
+          t.id === toolId ? { ...t, baseStatus: "maintenance", statusUpdatedAt: nowIso, currentSiteId: null } : t,
+        ),
+      }));
+
+      await Promise.all([
+        supabase.from("maintenance_records").insert({
+          id: maintenanceId,
+          tool_id: toolId,
+          user_id: user?.id ?? null,
+          user_name: profile?.name ?? "",
+          start_date: nowIso,
+          status: "active",
+        }),
+        supabase.from("tools").update({ base_status: "maintenance", status_updated_at: nowIso, current_site_id: null }).eq("id", toolId),
+        insertMovements([newMovement]),
+        logActivity("maintenance", "maintenance", toolId, tool.name, { status: tool.baseStatus, site: oldSite }, { status: "maintenance" }, oldSite),
+      ]);
     },
     [db.tools, db.sites, user, profile, insertMovements, logActivity],
   );
@@ -781,53 +921,74 @@ function useDataHook() {
     async (toolId: string, repairCost: number, invoiceNumber: string, invoiceAttachment: ToolAttachment | null) => {
       const tool = db.tools.find((t) => t.id === toolId);
       if (!tool) return;
-      const now = new Date();
-
-      // Find active maintenance record
       const activeRecord = db.maintenance.find((m) => m.toolId === toolId && m.status === "active");
+      const now = new Date();
+      const nowIso = now.toISOString();
+      const movementId = newId();
 
-      if (invoiceAttachment) {
-        await addAttachments([invoiceAttachment]);
-      }
+      const newMovement: ToolMovement = {
+        id: movementId,
+        toolId,
+        type: "maintenanceReturned",
+        description: `Retorno de manutenção — NF: ${invoiceNumber}, custo: R$ ${repairCost.toFixed(2)}`,
+        oldValue: "Manutenção",
+        newValue: "Disponível",
+        timestamp: nowIso,
+        attachmentIds: invoiceAttachment ? [invoiceAttachment.id] : [],
+        userId: user?.id ?? null,
+        userName: profile?.name ?? "",
+      };
 
-      if (activeRecord) {
-        await supabase
-          .from("maintenance_records")
-          .update({
-            repair_cost: repairCost,
-            invoice_number: invoiceNumber,
-            invoice_attachment_id: invoiceAttachment?.id ?? null,
-            return_date: now.toISOString(),
-            status: "completed",
-          })
-          .eq("id", activeRecord.id);
-      }
+      // Optimistic
+      setDB((prev) => ({
+        ...prev,
+        movements: [...prev.movements, newMovement],
+        maintenance: activeRecord ? prev.maintenance.map((m) => (m.id === activeRecord.id ? { ...m, repairCost, invoiceNumber, invoiceAttachmentId: invoiceAttachment?.id ?? null, returnDate: nowIso, status: "completed" } : m)) : prev.maintenance,
+        tools: prev.tools.map((t) => (t.id === toolId ? { ...t, baseStatus: "available", statusUpdatedAt: nowIso } : t)),
+        attachments: invoiceAttachment ? [...prev.attachments, invoiceAttachment] : prev.attachments,
+      }));
 
-      await supabase.from("tools").update({ base_status: "available", status_updated_at: now.toISOString() }).eq("id", toolId);
-
-      await insertMovements([
-        {
-          id: newId(),
-          toolId,
-          type: "maintenanceReturned",
-          description: `Retorno de manutenção — NF: ${invoiceNumber}, custo: R$ ${repairCost.toFixed(2)}`,
-          oldValue: "Manutenção",
-          newValue: "Disponível",
-          timestamp: now.toISOString(),
-          attachmentIds: invoiceAttachment ? [invoiceAttachment.id] : [],
-          userId: user?.id ?? null,
-          userName: profile?.name ?? "",
-        },
+      await Promise.all([
+        supabase.from("tools").update({ base_status: "available", status_updated_at: nowIso }).eq("id", toolId),
+        insertMovements([newMovement]),
+        logActivity("maintenance", "maintenance", toolId, tool.name, { status: "maintenance" }, { status: "available", repairCost, invoiceNumber }),
+        activeRecord
+          ? supabase
+              .from("maintenance_records")
+              .update({
+                repair_cost: repairCost,
+                invoice_number: invoiceNumber,
+                invoice_attachment_id: invoiceAttachment?.id ?? null,
+                return_date: nowIso,
+                status: "completed",
+              })
+              .eq("id", activeRecord.id)
+          : Promise.resolve(),
+        invoiceAttachment
+          ? supabase.from("tool_attachments").insert({
+              id: invoiceAttachment.id,
+              tool_id: invoiceAttachment.toolId,
+              movement_id: invoiceAttachment.movementId,
+              type: invoiceAttachment.type,
+              purpose: invoiceAttachment.purpose,
+              data_url: invoiceAttachment.dataUrl,
+              caption: invoiceAttachment.caption,
+            })
+          : Promise.resolve(),
       ]);
-
-      await logActivity("maintenance", "maintenance", toolId, tool.name, { status: "maintenance" }, { status: "available", repairCost, invoiceNumber });
     },
-    [db.tools, db.maintenance, user, profile, insertMovements, logActivity, addAttachments],
+    [db.tools, db.maintenance, user, profile, insertMovements, logActivity],
   );
 
   const saveUser = useCallback(
     async (updatedUser: UserProfile, previousRole?: UserRole) => {
       const isNew = !db.users.some((u) => u.id === updatedUser.id);
+
+      setDB((prev) => ({
+        ...prev,
+        users: isNew ? [...prev.users, { ...updatedUser, createdAt: updatedUser.createdAt ?? new Date().toISOString() }] : prev.users.map((u) => (u.id === updatedUser.id ? updatedUser : u)),
+      }));
+
       const row = {
         id: updatedUser.id,
         name: updatedUser.name,
@@ -843,6 +1004,10 @@ function useDataHook() {
       };
       const { error } = await supabase.from("profiles").upsert(row);
       if (error) {
+        setDB((prev) => ({
+          ...prev,
+          users: isNew ? prev.users.filter((u) => u.id !== updatedUser.id) : prev.users.map((u) => (u.id === updatedUser.id ? db.users.find((old) => old.id === updatedUser.id) ?? u : u)),
+        }));
         toast.error("Falha ao salvar usuário");
         console.error(error);
         return;
@@ -879,6 +1044,10 @@ function useDataHook() {
         console.error(signUpError);
         return;
       }
+      setDB((prev) => ({
+        ...prev,
+        users: prev.users.map((x) => (x.id === userId ? { ...x, email, role, active: true, hasLoginAccess: true } : x)),
+      }));
       await logActivity("roleChange", "user", userId, u.name, { hasLoginAccess: false }, { hasLoginAccess: true, email, role });
       toast.success("Acesso ao app concedido");
     },
@@ -888,11 +1057,20 @@ function useDataHook() {
   const revokeLoginAccess = useCallback(
     async (userId: string) => {
       const u = db.users.find((x) => x.id === userId);
+      setDB((prev) => ({
+        ...prev,
+        users: prev.users.map((x) => (x.id === userId ? { ...x, hasLoginAccess: false, active: false, authUserId: null } : x)),
+      }));
       const { error } = await supabase
         .from("profiles")
         .update({ has_login_access: false, active: false, auth_user_id: null })
         .eq("id", userId);
       if (error) {
+        // Rollback
+        setDB((prev) => ({
+          ...prev,
+          users: prev.users.map((x) => (x.id === userId && u ? { ...x, hasLoginAccess: u.hasLoginAccess, active: u.active, authUserId: u.authUserId } : x)),
+        }));
         toast.error("Falha ao revogar acesso");
         console.error(error);
         return;
@@ -906,60 +1084,99 @@ function useDataHook() {
   const deleteUser = useCallback(
     async (id: string) => {
       const u = db.users.find((x) => x.id === id);
-      const { error } = await supabase.from("profiles").delete().eq("id", id);
-      if (error) {
+      if (!u) return;
+
+      setDB((prev) => ({ ...prev, users: prev.users.filter((x) => x.id !== id) }));
+
+      const [delRes] = await Promise.all([
+        supabase.from("profiles").delete().eq("id", id),
+        logActivity("delete", "user", id, u.name || u.email),
+      ]);
+
+      if (delRes.error) {
+        setDB((prev) => ({ ...prev, users: [...prev.users, u] }));
         toast.error("Falha ao remover usuário");
-        return;
       }
-      if (u) await logActivity("delete", "user", id, u.name || u.email);
     },
     [db.users, logActivity],
   );
 
   const updateSettings = useCallback(async (partial: Partial<AppSettings>) => {
     const current = db.settings;
-    const { error } = await supabase
-      .from("app_settings")
-      .upsert({
-        id: 1,
-        notifications_enabled: partial.notificationsEnabled ?? current.notificationsEnabled,
-        alert_days_before: partial.alertDaysBefore ?? current.alertDaysBefore,
-      });
-    if (error) toast.error("Falha ao salvar configurações");
+    const nextSettings: AppSettings = {
+      notificationsEnabled: partial.notificationsEnabled ?? current.notificationsEnabled,
+      alertDaysBefore: partial.alertDaysBefore ?? current.alertDaysBefore,
+    };
+
+    setDB((prev) => ({ ...prev, settings: nextSettings }));
+
+    const { error } = await supabase.from("app_settings").upsert({
+      id: 1,
+      notifications_enabled: nextSettings.notificationsEnabled,
+      alert_days_before: nextSettings.alertDaysBefore,
+    });
+    if (error) {
+      setDB((prev) => ({ ...prev, settings: current }));
+      toast.error("Falha ao salvar configurações");
+    }
   }, [db.settings]);
 
   // MARK: - Movement types CRUD
 
   const saveMovementType = useCallback(
     async (mt: MovementTypeEntity) => {
-      const { data: existing } = await supabase.from("movement_types").select("id").eq("id", mt.id).maybeSingle();
-      const isNew = !existing;
-      const { error } = await supabase.from("movement_types").upsert({
-        id: mt.id,
-        name: mt.name,
-        description: mt.description,
-        is_active: mt.isActive,
-        is_system: mt.isSystem,
-        sort_order: mt.sortOrder,
-      });
-      if (error) {
+      const isNew = !db.movementTypes.some((m) => m.id === mt.id);
+
+      setDB((prev) => ({
+        ...prev,
+        movementTypes: isNew ? [...prev.movementTypes, { ...mt, createdAt: mt.createdAt ?? new Date().toISOString() }] : prev.movementTypes.map((m) => (m.id === mt.id ? mt : m)),
+      }));
+
+      const [upsertRes] = await Promise.all([
+        supabase.from("movement_types").upsert({
+          id: mt.id,
+          name: mt.name,
+          description: mt.description,
+          is_active: mt.isActive,
+          is_system: mt.isSystem,
+          sort_order: mt.sortOrder,
+        }),
+        logActivity("movementTypeManage", "movement_type", mt.id, mt.name, undefined, { name: mt.name, description: mt.description, isNew }),
+      ]);
+
+      if (upsertRes.error) {
+        setDB((prev) => ({
+          ...prev,
+          movementTypes: isNew ? prev.movementTypes.filter((m) => m.id !== mt.id) : prev.movementTypes.map((m) => (m.id === mt.id ? db.movementTypes.find((old) => old.id === mt.id) ?? m : m)),
+        }));
         toast.error("Falha ao salvar tipo de movimentação");
-        return;
       }
-      await logActivity("movementTypeManage", "movement_type", mt.id, mt.name, undefined, { name: mt.name, description: mt.description, isNew });
     },
-    [logActivity],
+    [db.movementTypes, logActivity],
   );
 
   const toggleMovementType = useCallback(
     async (id: string, isActive: boolean) => {
       const mt = db.movementTypes.find((m) => m.id === id);
-      const { error } = await supabase.from("movement_types").update({ is_active: isActive, updated_at: new Date().toISOString() }).eq("id", id);
-      if (error) {
+      if (!mt) return;
+
+      setDB((prev) => ({
+        ...prev,
+        movementTypes: prev.movementTypes.map((m) => (m.id === id ? { ...m, isActive } : m)),
+      }));
+
+      const [updateRes] = await Promise.all([
+        supabase.from("movement_types").update({ is_active: isActive, updated_at: new Date().toISOString() }).eq("id", id),
+        logActivity("movementTypeManage", "movement_type", id, mt.name, { isActive: mt.isActive }, { isActive }),
+      ]);
+
+      if (updateRes.error) {
+        setDB((prev) => ({
+          ...prev,
+          movementTypes: prev.movementTypes.map((m) => (m.id === id ? { ...m, isActive: mt.isActive } : m)),
+        }));
         toast.error("Falha ao atualizar tipo de movimentação");
-        return;
       }
-      if (mt) await logActivity("movementTypeManage", "movement_type", id, mt.name, { isActive: mt.isActive }, { isActive });
     },
     [db.movementTypes, logActivity],
   );
@@ -968,28 +1185,52 @@ function useDataHook() {
 
   const savePermission = useCallback(
     async (siteId: string, userId: string, movementTypeId: string, allowed: boolean) => {
-      const { data: existing } = await supabase
-        .from("site_user_permissions")
-        .select("id")
-        .eq("site_id", siteId)
-        .eq("user_id", userId)
-        .eq("movement_type_id", movementTypeId)
-        .maybeSingle();
+      const existing = db.siteUserPermissions.find(
+        (p) => p.siteId === siteId && p.userId === userId && p.movementTypeId === movementTypeId,
+      );
 
+      // Optimistic
       if (existing) {
-        await supabase.from("site_user_permissions").update({ allowed, updated_at: new Date().toISOString() }).eq("id", (existing as Record<string, unknown>).id as string);
+        setDB((prev) => ({
+          ...prev,
+          siteUserPermissions: prev.siteUserPermissions.map((p) => (p.id === existing.id ? { ...p, allowed } : p)),
+        }));
       } else {
-        await supabase.from("site_user_permissions").insert({ site_id: siteId, user_id: userId, movement_type_id: movementTypeId, allowed });
+        const newId_ = newId();
+        setDB((prev) => ({
+          ...prev,
+          siteUserPermissions: [...prev.siteUserPermissions, { id: newId_, siteId, userId, movementTypeId, allowed, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }],
+        }));
       }
 
-      const mt = db.movementTypes.find((m) => m.id === movementTypeId);
-      const site = db.sites.find((s) => s.id === siteId);
-      const targetUser = db.users.find((u) => u.id === userId);
-      if (mt && site && targetUser) {
-        await logActivity("permissionChange", "permission", `${siteId}:${userId}:${movementTypeId}`, `${targetUser.name} — ${site.name} — ${mt.name}`, undefined, { allowed, movementType: mt.name, site: site.name, user: targetUser.name }, siteId);
+      const [writeRes] = await Promise.all([
+        existing
+          ? supabase.from("site_user_permissions").update({ allowed, updated_at: new Date().toISOString() }).eq("id", existing.id)
+          : supabase.from("site_user_permissions").insert({ site_id: siteId, user_id: userId, movement_type_id: movementTypeId, allowed }),
+        (() => {
+          const mt = db.movementTypes.find((m) => m.id === movementTypeId);
+          const site = db.sites.find((s) => s.id === siteId);
+          const targetUser = db.users.find((u) => u.id === userId);
+          if (mt && site && targetUser) {
+            return logActivity("permissionChange", "permission", `${siteId}:${userId}:${movementTypeId}`, `${targetUser.name} — ${site.name} — ${mt.name}`, undefined, { allowed, movementType: mt.name, site: site.name, user: targetUser.name }, siteId);
+          }
+          return Promise.resolve();
+        })(),
+      ]);
+
+      if (writeRes.error) {
+        // Rollback
+        setDB((prev) => ({
+          ...prev,
+          siteUserPermissions: existing
+            ? prev.siteUserPermissions.map((p) => (p.id === existing.id ? { ...p, allowed: existing.allowed } : p))
+            : prev.siteUserPermissions.filter((p) => !(p.siteId === siteId && p.userId === userId && p.movementTypeId === movementTypeId && p.allowed === allowed)),
+        }));
+        toast.error("Falha ao salvar permissão");
+        console.error(writeRes.error);
       }
     },
-    [db.movementTypes, db.sites, db.users, logActivity],
+    [db.movementTypes, db.sites, db.users, db.siteUserPermissions, logActivity],
   );
 
   const hasPermission = useCallback(
@@ -1007,6 +1248,17 @@ function useDataHook() {
   const bulkInsertTools = useCallback(
     async (tools: Tool[]): Promise<{ count: number; error: string | null }> => {
       if (tools.length === 0) return { count: 0, error: null };
+
+      // Optimistic: append all to local state with computed timestamps
+      const nowIso = new Date().toISOString();
+      const optimisticTools: Tool[] = tools.map((tool) => ({
+        ...tool,
+        nextAuditDate: tool.nextAuditDate ?? computeNextAuditDate(tool.auditFrequency),
+        statusUpdatedAt: nowIso,
+        createdAt: tool.createdAt ?? nowIso,
+      }));
+      setDB((prev) => ({ ...prev, tools: [...prev.tools, ...optimisticTools] }));
+
       const rows = tools.map((tool) => ({
         id: tool.id,
         name: tool.name,
@@ -1027,10 +1279,13 @@ function useDataHook() {
         audit_frequency: tool.auditFrequency,
         last_audit_date: tool.lastAuditDate,
         next_audit_date: tool.nextAuditDate ?? computeNextAuditDate(tool.auditFrequency),
-        status_updated_at: new Date().toISOString(),
+        status_updated_at: nowIso,
       }));
       const { error } = await supabase.from("tools").insert(rows);
       if (error) {
+        // Rollback optimistic tools
+        const insertedIds = new Set(tools.map((t) => t.id));
+        setDB((prev) => ({ ...prev, tools: prev.tools.filter((t) => !insertedIds.has(t.id)) }));
         console.error("Bulk insert failed", error);
         return { count: 0, error: error.message || "Erro ao inserir no Supabase" };
       }
@@ -1083,3 +1338,6 @@ export function useToolRelations() {
     [db.companies, db.sites, db.users],
   );
 }
+
+// Keep AUDIT_FREQUENCY_DAYS re-exported for backwards compatibility with existing imports.
+export { AUDIT_FREQUENCY_DAYS };
