@@ -91,6 +91,7 @@ export default function Tools() {
   const { db } = useData();
   const location = useLocation();
   const [search, setSearch] = useState("");
+  const [siteSearch, setSiteSearch] = useState("");
   const [filterOwnership, setFilterOwnership] = useState<ToolOwnership | null>(null);
   const [filterStatus, setFilterStatus] = useState<ToolStatus | null>(null);
   const [filterResponsible, setFilterResponsible] = useState<string | null>(null);
@@ -106,6 +107,7 @@ export default function Tools() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const siteQ = siteSearch.trim().toLowerCase();
     return [...db.tools]
       .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))
       .filter((tool) => {
@@ -120,9 +122,11 @@ export default function Tools() {
         const matchesOwnership = filterOwnership === null || tool.ownership === filterOwnership;
         const matchesStatus = filterStatus === null || effectiveStatus(tool) === filterStatus;
         const matchesResponsible = filterResponsible === null || tool.currentUserId === filterResponsible;
-        return matchesSearch && matchesOwnership && matchesStatus && matchesResponsible;
+        const siteName = tool.currentSiteId ? db.sites.find((s) => s.id === tool.currentSiteId)?.name ?? "" : "";
+        const matchesSite = siteQ === "" || siteName.toLowerCase().includes(siteQ);
+        return matchesSearch && matchesOwnership && matchesStatus && matchesResponsible && matchesSite;
       });
-  }, [db.tools, search, filterOwnership, filterStatus, filterResponsible, showDisabled]);
+  }, [db.tools, db.sites, search, siteSearch, filterOwnership, filterStatus, filterResponsible, showDisabled]);
 
   const clearResponsibleFilter = () => setFilterResponsible(null);
 
@@ -130,6 +134,7 @@ export default function Tools() {
     <PageContainer title="Ferramentas">
       <div className="flex flex-col gap-4 pb-6">
         <SearchInput value={search} onChange={setSearch} placeholder="Nome, marca ou série" />
+        <SearchInput value={siteSearch} onChange={setSiteSearch} placeholder="Filtrar por obra (digite o nome)" />
 
         {filterResponsible && (
           <button
@@ -138,6 +143,17 @@ export default function Tools() {
             className="flex items-center justify-between rounded-lg border border-app-accent/30 bg-app-accent/10 px-3 py-2 text-xs font-semibold text-app-accent"
           >
             <span>Filtrado: somente minhas ferramentas</span>
+            <span>Limpar ×</span>
+          </button>
+        )}
+
+        {siteSearch && (
+          <button
+            type="button"
+            onClick={() => setSiteSearch("")}
+            className="flex items-center justify-between rounded-lg border border-app-orange/30 bg-app-orange/10 px-3 py-2 text-xs font-semibold text-app-orange"
+          >
+            <span>Filtrado por obra: {siteSearch}</span>
             <span>Limpar ×</span>
           </button>
         )}
