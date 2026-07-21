@@ -1,5 +1,5 @@
 import JSZip from "jszip";
-import type { ConstructionSite, DB, UserProfile, RentalCompany, Tool, ToolAttachment, ToolMovement } from "./types";
+import type { ConstructionSite, DB, UserProfile, RentalCompany, Tool, ToolAttachment, ToolMovement, Workshop } from "./types";
 import {
   ATTACHMENT_PURPOSE_LABEL,
   MOVEMENT_LABEL,
@@ -38,23 +38,26 @@ interface Lookups {
   companyName: (id: string | null) => string;
   siteName: (id: string | null) => string;
   userName: (id: string | null) => string;
+  workshopName: (id: string | null) => string;
 }
 
 function buildLookups(db: DB): Lookups {
   const companies = new Map(db.companies.map((c: RentalCompany) => [c.id, c.name]));
   const sites = new Map(db.sites.map((s: ConstructionSite) => [s.id, s.name]));
   const users = new Map(db.users.map((u: UserProfile) => [u.id, u.name]));
+  const workshops = new Map(db.workshops.map((w: Workshop) => [w.id, w.name]));
   return {
     companyName: (id) => (id ? companies.get(id) ?? "" : ""),
     siteName: (id) => (id ? sites.get(id) ?? "" : ""),
     userName: (id) => (id ? users.get(id) ?? "" : ""),
+    workshopName: (id) => (id ? workshops.get(id) ?? "" : ""),
   };
 }
 
 /** Full inventory CSV; packaged in a ZIP with media when attachments exist. */
 export async function generateToolsReport(db: DB): Promise<void> {
   const lookups = buildLookups(db);
-  let csv = "Ferramenta;Marca;Modelo;N Serie;Tipo;Status;Obra;Responsavel;Locadora;Custo Diario;Inicio Aluguel;Devolucao;Dias Restantes;Custo Acumulado;Observacoes;Fotos;Videos\n";
+  let csv = "Ferramenta;Marca;Modelo;N Serie;Tipo;Status;Obra;Responsavel;Locadora;Oficina;Custo Diario;Inicio Aluguel;Devolucao;Dias Restantes;Custo Acumulado;Ultimo Usuario (obra);Observacoes;Fotos;Videos\n";
 
   const sorted = [...db.tools].sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
   const allAttachments: ToolAttachment[] = [];
@@ -74,11 +77,13 @@ export async function generateToolsReport(db: DB): Promise<void> {
       lookups.siteName(tool.currentSiteId),
       lookups.userName(tool.currentUserId),
       lookups.companyName(tool.rentalCompanyId),
+      lookups.workshopName(tool.workshopId),
       isRentalTracked(tool) ? totalToFixed(tool.dailyRentalCost) : "",
       tool.rentalStartDate ? formatShortDate(tool.rentalStartDate) : "",
       tool.rentalEndDate ? formatShortDate(tool.rentalEndDate) : "",
       days !== null ? String(days) : "",
       isRentalTracked(tool) ? totalToFixed(totalRentalCost(tool)) : "",
+      tool.lastUser || "",
       tool.notes.split(";").join(","),
       String(photos),
       String(videos),
@@ -122,7 +127,7 @@ export function generateRentalReport(db: DB): void {
 
   let csv = "Relatorio de Alugueis\n";
   csv += `Gerado em: ${formatShortDate(new Date())}\n\n`;
-  csv += "Ferramenta;Locadora;Obra;Responsavel;Custo Diario;Inicio;Devolucao;Dias Restantes;Custo Acumulado;Status\n";
+  csv += "Ferramenta;Locadora;Obra;Responsavel;Custo Diario;Inicio;Devolucao;Dias Restantes;Custo Acumulado;Status;Ultimo Usuario (obra)\n";
 
   let totalCost = 0;
   for (const tool of rented) {
@@ -143,12 +148,13 @@ export function generateRentalReport(db: DB): void {
       String(days),
       totalToFixed(cost),
       statusText,
+      tool.lastUser || "—",
     ];
     csv += row.join(";") + "\n";
     totalCost += cost;
   }
 
-  csv += `\n;Total;;;;;;;${totalToFixed(totalCost)};\n`;
+  csv += `\n;Total;;;;;;;${totalToFixed(totalCost)};;\n`;
   downloadCSV(csv, "relatorio-alugueis");
 }
 

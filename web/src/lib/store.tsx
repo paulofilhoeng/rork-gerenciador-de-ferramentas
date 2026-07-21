@@ -21,6 +21,7 @@ import type {
   ToolMovement,
   UserProfile,
   UserRole,
+  Workshop,
 } from "./types";
 import { AUDIT_FREQUENCY_DAYS, computeNextAuditDate, newId } from "./types";
 
@@ -43,6 +44,9 @@ function mapTool(row: Record<string, unknown>): Tool {
     rentalCompanyId: (row.rental_company_id as string) ?? null,
     currentSiteId: (row.current_site_id as string) ?? null,
     currentUserId: (row.current_user_id as string) ?? null,
+    workshopId: (row.workshop_id as string) ?? null,
+    damageObs: (row.damage_obs as string) ?? "",
+    lastUser: (row.last_user as string) ?? "",
     auditFrequency: (row.audit_frequency as AuditFrequency) ?? "monthly",
     lastAuditDate: (row.last_audit_date as string) ?? null,
     nextAuditDate: (row.next_audit_date as string) ?? null,
@@ -157,7 +161,6 @@ function mapProfile(row: Record<string, unknown>): UserProfile {
     name: (row.name as string) ?? "",
     email: (row.email as string) ?? null,
     phone: (row.phone as string) ?? "",
-    cpf: (row.cpf as string) ?? "",
     jobRole: (row.job_role as string) ?? "",
     level: (row.level as string) ?? "",
     siteId: (row.site_id as string) ?? null,
@@ -201,9 +204,25 @@ function mapSiteUserPermission(row: Record<string, unknown>): SiteUserPermission
   };
 }
 
+function mapWorkshop(row: Record<string, unknown>): Workshop {
+  return {
+    id: row.id as string,
+    name: (row.name as string) ?? "",
+    address: (row.address as string) ?? "",
+    phone: (row.phone as string) ?? "",
+    contact1Name: (row.contact1_name as string) ?? "",
+    contact1Phone: (row.contact1_phone as string) ?? "",
+    contact2Name: (row.contact2_name as string) ?? "",
+    contact2Phone: (row.contact2_phone as string) ?? "",
+    notes: (row.notes as string) ?? "",
+    createdAt: (row.created_at as string) ?? new Date().toISOString(),
+  };
+}
+
 const EMPTY_DB: DB = {
   tools: [],
   companies: [],
+  workshops: [],
   sites: [],
   movements: [],
   attachments: [],
@@ -223,6 +242,8 @@ interface DataContextValue {
   deleteTool: (id: string) => Promise<void>;
   saveCompany: (company: RentalCompany) => Promise<void>;
   deleteCompany: (id: string) => Promise<void>;
+  saveWorkshop: (workshop: Workshop) => Promise<void>;
+  deleteWorkshop: (id: string) => Promise<void>;
   saveSite: (site: ConstructionSite) => Promise<void>;
   deleteSite: (id: string) => Promise<void>;
   saveUser: (user: UserProfile, previousRole?: UserRole) => Promise<void>;
@@ -236,11 +257,15 @@ interface DataContextValue {
   reportDamage: (toolId: string, description: string) => Promise<void>;
   startMaintenance: (toolId: string) => Promise<void>;
   returnFromMaintenance: (toolId: string, repairCost: number, invoiceNumber: string, invoiceAttachment: ToolAttachment | null) => Promise<void>;
+  markDamaged: (toolId: string, damageObs: string, lastUser: string) => Promise<void>;
+  unmarkDamaged: (toolId: string) => Promise<void>;
+  assignToWorkshop: (toolId: string, workshopId: string) => Promise<void>;
   updateSettings: (partial: Partial<AppSettings>) => Promise<void>;
   saveMovementType: (mt: MovementTypeEntity) => Promise<void>;
   toggleMovementType: (id: string, isActive: boolean) => Promise<void>;
   savePermission: (siteId: string, userId: string, movementTypeId: string, allowed: boolean) => Promise<void>;
   hasPermission: (userId: string, siteId: string | null, movementTypeName: string) => boolean;
+  visibleSiteIds: (userId: string, isAdmin: boolean) => string[] | null;
   bulkInsertTools: (tools: Tool[]) => Promise<{ count: number; error: string | null }>;
 }
 
@@ -265,6 +290,7 @@ function useDataHook() {
         const [
           toolsRes,
           companiesRes,
+          workshopsRes,
           sitesRes,
           movementsRes,
           attachmentsRes,
@@ -278,6 +304,7 @@ function useDataHook() {
         ] = await Promise.all([
           supabase.from("tools").select("*"),
           supabase.from("rental_companies").select("*"),
+          supabase.from("workshops").select("*"),
           supabase.from("construction_sites").select("*"),
           supabase.from("tool_movements").select("*"),
           supabase.from("tool_attachments").select("*"),
@@ -304,6 +331,7 @@ function useDataHook() {
         setDB({
           tools: (toolsRes.data ?? []).map((r) => mapTool(r as Record<string, unknown>)),
           companies: (companiesRes.data ?? []).map((r) => mapCompany(r as Record<string, unknown>)),
+          workshops: (workshopsRes.data ?? []).map((r) => mapWorkshop(r as Record<string, unknown>)),
           sites: (sitesRes.data ?? []).map((r) => mapSite(r as Record<string, unknown>)),
           movements,
           attachments: (attachmentsRes.data ?? []).map((r) => mapAttachment(r as Record<string, unknown>)),
@@ -344,6 +372,14 @@ function useDataHook() {
           const newRow = mapCompany(payload.new as Record<string, unknown>);
           const exists = prev.companies.some((c) => c.id === newRow.id);
           return { ...prev, companies: exists ? prev.companies.map((c) => (c.id === newRow.id ? newRow : c)) : [...prev.companies, newRow] };
+        });
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "workshops" }, (payload) => {
+        setDB((prev) => {
+          if (payload.eventType === "DELETE") return { ...prev, workshops: prev.workshops.filter((w) => w.id !== (payload.old as Record<string, unknown>).id) };
+          const newRow = mapWorkshop(payload.new as Record<string, unknown>);
+          const exists = prev.workshops.some((w) => w.id === newRow.id);
+          return { ...prev, workshops: exists ? prev.workshops.map((w) => (w.id === newRow.id ? newRow : w)) : [...prev.workshops, newRow] };
         });
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "construction_sites" }, (payload) => {
@@ -513,6 +549,9 @@ function useDataHook() {
         rental_company_id: tool.rentalCompanyId,
         current_site_id: tool.currentSiteId,
         current_user_id: tool.currentUserId,
+        workshop_id: tool.workshopId,
+        damage_obs: tool.damageObs,
+        last_user: tool.lastUser,
         audit_frequency: tool.auditFrequency,
         last_audit_date: tool.lastAuditDate,
         next_audit_date: tool.nextAuditDate ?? computeNextAuditDate(tool.auditFrequency),
@@ -854,6 +893,154 @@ function useDataHook() {
     [db.tools, user, profile, insertMovements, logActivity],
   );
 
+  // MARK: - Damaged flow (mark/unmark)
+
+  const markDamaged = useCallback(
+    async (toolId: string, damageObs: string, lastUser: string) => {
+      const tool = db.tools.find((t) => t.id === toolId);
+      if (!tool) return;
+      const nowIso = new Date().toISOString();
+      const movementId = newId();
+
+      const newMovement: ToolMovement = {
+        id: movementId,
+        toolId,
+        type: "markedDamaged",
+        description: `Marcada como Avariada${damageObs ? ": " + damageObs : ""}`,
+        oldValue: tool.baseStatus,
+        newValue: "damaged",
+        timestamp: nowIso,
+        attachmentIds: [],
+        userId: user?.id ?? null,
+        userName: profile?.name ?? "",
+      };
+
+      // Optimistic
+      setDB((prev) => ({
+        ...prev,
+        movements: [...prev.movements, newMovement],
+        tools: prev.tools.map((t) =>
+          t.id === toolId
+            ? { ...t, baseStatus: "damaged", damageObs, lastUser, statusUpdatedAt: nowIso }
+            : t,
+        ),
+      }));
+
+      await Promise.all([
+        supabase.from("tools").update({ base_status: "damaged", damage_obs: damageObs, last_user: lastUser, status_updated_at: nowIso }).eq("id", toolId),
+        insertMovements([newMovement]),
+        logActivity("maintenance", "tool", toolId, tool.name, { status: tool.baseStatus }, { status: "damaged", damageObs, lastUser }, tool.currentSiteId),
+      ]);
+    },
+    [db.tools, user, profile, insertMovements, logActivity],
+  );
+
+  const unmarkDamaged = useCallback(
+    async (toolId: string) => {
+      const tool = db.tools.find((t) => t.id === toolId);
+      if (!tool) return;
+      const nowIso = new Date().toISOString();
+      const movementId = newId();
+
+      const newMovement: ToolMovement = {
+        id: movementId,
+        toolId,
+        type: "unmarkedDamaged",
+        description: "Avaria removida — ferramenta disponível",
+        oldValue: "damaged",
+        newValue: "available",
+        timestamp: nowIso,
+        attachmentIds: [],
+        userId: user?.id ?? null,
+        userName: profile?.name ?? "",
+      };
+
+      // Optimistic — return to available, clear damage fields.
+      setDB((prev) => ({
+        ...prev,
+        movements: [...prev.movements, newMovement],
+        tools: prev.tools.map((t) =>
+          t.id === toolId
+            ? { ...t, baseStatus: "available", damageObs: "", statusUpdatedAt: nowIso }
+            : t,
+        ),
+      }));
+
+      await Promise.all([
+        supabase.from("tools").update({ base_status: "available", damage_obs: "", status_updated_at: nowIso }).eq("id", toolId),
+        insertMovements([newMovement]),
+        logActivity("maintenance", "tool", toolId, tool.name, { status: "damaged" }, { status: "available" }, tool.currentSiteId),
+      ]);
+    },
+    [db.tools, user, profile, insertMovements, logActivity],
+  );
+
+  // MARK: - Workshop assignment (ADM only)
+
+  const assignToWorkshop = useCallback(
+    async (toolId: string, workshopId: string) => {
+      const tool = db.tools.find((t) => t.id === toolId);
+      if (!tool) return;
+      const nowIso = new Date().toISOString();
+      const maintenanceId = newId();
+      const movementId = newId();
+      const workshop = db.workshops.find((w) => w.id === workshopId);
+      const workshopName = workshop?.name ?? "Oficina";
+
+      const newMaintenance: MaintenanceRecord = {
+        id: maintenanceId,
+        toolId,
+        userId: user?.id ?? null,
+        userName: profile?.name ?? "",
+        repairCost: 0,
+        invoiceNumber: "",
+        invoiceAttachmentId: null,
+        startDate: nowIso,
+        returnDate: null,
+        status: "active",
+      };
+      const newMovement: ToolMovement = {
+        id: movementId,
+        toolId,
+        type: "workshopAssigned",
+        description: `Enviada para oficina: ${workshopName}`,
+        oldValue: tool.baseStatus,
+        newValue: "maintenance",
+        timestamp: nowIso,
+        attachmentIds: [],
+        userId: user?.id ?? null,
+        userName: profile?.name ?? "",
+      };
+
+      // Optimistic
+      setDB((prev) => ({
+        ...prev,
+        maintenance: [...prev.maintenance, newMaintenance],
+        movements: [...prev.movements, newMovement],
+        tools: prev.tools.map((t) =>
+          t.id === toolId
+            ? { ...t, baseStatus: "maintenance", workshopId, currentSiteId: null, statusUpdatedAt: nowIso }
+            : t,
+        ),
+      }));
+
+      await Promise.all([
+        supabase.from("tools").update({ base_status: "maintenance", workshop_id: workshopId, current_site_id: null, status_updated_at: nowIso }).eq("id", toolId),
+        supabase.from("maintenance_records").insert({
+          id: maintenanceId,
+          tool_id: toolId,
+          user_id: user?.id ?? null,
+          user_name: profile?.name ?? "",
+          start_date: nowIso,
+          status: "active",
+        }),
+        insertMovements([newMovement]),
+        logActivity("maintenance", "workshop", workshopId, workshopName, { tool: tool.name, status: tool.baseStatus }, { status: "maintenance", workshop: workshopName }),
+      ]);
+    },
+    [db.tools, db.workshops, user, profile, insertMovements, logActivity],
+  );
+
   const startMaintenance = useCallback(
     async (toolId: string) => {
       const tool = db.tools.find((t) => t.id === toolId);
@@ -994,7 +1181,6 @@ function useDataHook() {
         name: updatedUser.name,
         email: updatedUser.email,
         phone: updatedUser.phone,
-        cpf: updatedUser.cpf,
         job_role: updatedUser.jobRole,
         level: updatedUser.level,
         site_id: updatedUser.siteId,
@@ -1253,6 +1439,9 @@ function useDataHook() {
       const nowIso = new Date().toISOString();
       const optimisticTools: Tool[] = tools.map((tool) => ({
         ...tool,
+        workshopId: null,
+        damageObs: "",
+        lastUser: "",
         nextAuditDate: tool.nextAuditDate ?? computeNextAuditDate(tool.auditFrequency),
         statusUpdatedAt: nowIso,
         createdAt: tool.createdAt ?? nowIso,
@@ -1276,6 +1465,9 @@ function useDataHook() {
         rental_company_id: tool.rentalCompanyId,
         current_site_id: tool.currentSiteId,
         current_user_id: tool.currentUserId,
+        workshop_id: null,
+        damage_obs: "",
+        last_user: "",
         audit_frequency: tool.auditFrequency,
         last_audit_date: tool.lastAuditDate,
         next_audit_date: tool.nextAuditDate ?? computeNextAuditDate(tool.auditFrequency),
@@ -1296,6 +1488,84 @@ function useDataHook() {
     [logActivity],
   );
 
+  // MARK: - Workshop CRUD
+
+  const saveWorkshop = useCallback(
+    async (workshop: Workshop) => {
+      const isNew = !db.workshops.some((w) => w.id === workshop.id);
+
+      setDB((prev) => ({
+        ...prev,
+        workshops: isNew ? [...prev.workshops, { ...workshop, createdAt: workshop.createdAt ?? new Date().toISOString() }] : prev.workshops.map((w) => (w.id === workshop.id ? workshop : w)),
+      }));
+
+      const [upsertRes] = await Promise.all([
+        supabase.from("workshops").upsert({
+          id: workshop.id,
+          name: workshop.name,
+          address: workshop.address,
+          phone: workshop.phone,
+          contact1_name: workshop.contact1Name,
+          contact1_phone: workshop.contact1Phone,
+          contact2_name: workshop.contact2Name,
+          contact2_phone: workshop.contact2Phone,
+          notes: workshop.notes,
+        }),
+        logActivity(isNew ? "create" : "edit", "workshop", workshop.id, workshop.name),
+      ]);
+
+      if (upsertRes.error) {
+        setDB((prev) => ({
+          ...prev,
+          workshops: isNew ? prev.workshops.filter((w) => w.id !== workshop.id) : prev.workshops.map((w) => (w.id === workshop.id ? db.workshops.find((old) => old.id === workshop.id) ?? w : w)),
+        }));
+        toast.error("Falha ao salvar oficina");
+      }
+    },
+    [db.workshops, logActivity],
+  );
+
+  const deleteWorkshop = useCallback(
+    async (id: string) => {
+      const workshop = db.workshops.find((w) => w.id === id);
+      if (!workshop) return;
+
+      setDB((prev) => ({ ...prev, workshops: prev.workshops.filter((w) => w.id !== id) }));
+
+      const [delRes] = await Promise.all([
+        supabase.from("workshops").delete().eq("id", id),
+        logActivity("delete", "workshop", id, workshop.name),
+      ]);
+
+      if (delRes.error) {
+        setDB((prev) => ({ ...prev, workshops: [...prev.workshops, workshop] }));
+        toast.error("Falha ao excluir oficina");
+      }
+    },
+    [db.workshops, logActivity],
+  );
+
+  // MARK: - Visible sites (transversal obra/user rule)
+
+  const visibleSiteIds = useCallback(
+    (userId: string, isAdmin: boolean): string[] | null => {
+      if (isAdmin) return null; // null = all sites
+      const allowed = new Set<string>();
+      for (const p of db.siteUserPermissions) {
+        if (p.userId === userId && p.allowed) allowed.add(p.siteId);
+      }
+      // Also include sites where the user is the responsible for tools (currentUserId).
+      for (const t of db.tools) {
+        if (t.currentUserId === userId && t.currentSiteId) allowed.add(t.currentSiteId);
+      }
+      // Include the user's lotation site.
+      const user = db.users.find((u) => u.id === userId);
+      if (user?.siteId) allowed.add(user.siteId);
+      return Array.from(allowed);
+    },
+    [db.siteUserPermissions, db.tools, db.users],
+  );
+
   return {
     db,
     loading,
@@ -1303,6 +1573,8 @@ function useDataHook() {
     deleteTool,
     saveCompany,
     deleteCompany,
+    saveWorkshop,
+    deleteWorkshop,
     saveSite,
     deleteSite,
     addMovements,
@@ -1312,6 +1584,9 @@ function useDataHook() {
     reportDamage,
     startMaintenance,
     returnFromMaintenance,
+    markDamaged,
+    unmarkDamaged,
+    assignToWorkshop,
     saveUser,
     deleteUser,
     grantLoginAccess,
@@ -1321,6 +1596,7 @@ function useDataHook() {
     toggleMovementType,
     savePermission,
     hasPermission,
+    visibleSiteIds,
     bulkInsertTools,
   };
 }
@@ -1332,10 +1608,11 @@ export function useToolRelations() {
   return useMemo(
     () => ({
       companyById: (id: string | null) => (id ? db.companies.find((c) => c.id === id) ?? null : null),
+      workshopById: (id: string | null) => (id ? db.workshops.find((w) => w.id === id) ?? null : null),
       siteById: (id: string | null) => (id ? db.sites.find((s) => s.id === id) ?? null : null),
       userById: (id: string | null) => (id ? db.users.find((u) => u.id === id) ?? null : null),
     }),
-    [db.companies, db.sites, db.users],
+    [db.companies, db.workshops, db.sites, db.users],
   );
 }
 

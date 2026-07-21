@@ -5,7 +5,6 @@ import {
   BarChart3,
   Building2,
   CheckCircle2,
-  ChevronRight,
   ClipboardCheck,
   Clock,
   Download,
@@ -26,24 +25,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { PageContainer } from "@/components/Layout";
-import { Card, COLOR_TEXT, IconTile, MOVEMENT_ICON, SectionHeader, Separator } from "@/components/shared";
+import { Card, COLOR_TEXT, IconTile, MOVEMENT_ICON, SectionHeader, Separator, StatusBadge, TOOL_STATUS_COLOR, TOOL_STATUS_ICON } from "@/components/shared";
 import { useData } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
-import type { StatusColor, Tool } from "@/lib/types";
-import { MOVEMENT_COLOR, MOVEMENT_LABEL, TOOL_STATUS_COLOR, TOOL_STATUS_LABEL, auditDaysRemaining, daysRemaining, effectiveStatus, isAuditDue, isRentalEndingSoon, isRentalTracked, totalRentalCost } from "@/lib/types";
-import { formatCurrency, formatRelativeTime } from "@/lib/format";
+import type { StatusColor, Tool, ToolStatus } from "@/lib/types";
+import { MOVEMENT_COLOR, MOVEMENT_LABEL, OWNERSHIP_LABEL, TOOL_STATUS_LABEL, auditDaysRemaining, daysRemaining, effectiveStatus, isAuditDue, isRentalEndingSoon, isRentalTracked, totalRentalCost } from "@/lib/types";
+import { formatCurrency, formatRelativeTime, formatShortDate, formatShortDateWithWeekday } from "@/lib/format";
 import { generateMovementsReport, generateRentalReport, generateToolsReport } from "@/lib/reports";
 import { cn } from "@/lib/utils";
-
-function StatCard({ title, value, icon: Icon, color }: { title: string; value: number; icon: LucideIcon; color: "accent" | "appOrange" | StatusColor }) {
-  return (
-    <Card className="flex flex-col items-start gap-2.5 p-3.5">
-      <IconTile icon={Icon} color={color} size={38} iconSize={20} />
-      <span className="text-3xl font-bold text-white">{value}</span>
-      <span className="text-[13px] font-medium text-app-muted">{title}</span>
-    </Card>
-  );
-}
 
 function AlertCard({
   title,
@@ -52,6 +41,7 @@ function AlertCard({
   color,
   tools,
   companyName,
+  showWeekday = false,
 }: {
   title: string;
   subtitle: string;
@@ -59,6 +49,7 @@ function AlertCard({
   color: StatusColor;
   tools: Tool[];
   companyName: (id: string | null) => string;
+  showWeekday?: boolean;
 }) {
   return (
     <Card className="flex flex-col gap-2">
@@ -70,9 +61,11 @@ function AlertCard({
         </div>
       </div>
       {tools.slice(0, 3).map((tool) => (
-        <div key={tool.id} className="flex items-center justify-between pl-[46px]">
-          <span className="text-[13px] font-medium text-app-muted">{tool.name}</span>
-          <span className="text-[11px] text-app-muted/60">{companyName(tool.rentalCompanyId)}</span>
+        <div key={tool.id} className="flex items-center justify-between gap-2 pl-[46px]">
+          <span className="truncate text-[13px] font-medium text-app-muted">{tool.name}</span>
+          <span className="shrink-0 text-[11px] text-app-muted/60">
+            {showWeekday && tool.rentalEndDate ? formatShortDateWithWeekday(tool.rentalEndDate) : companyName(tool.rentalCompanyId)}
+          </span>
         </div>
       ))}
       {tools.length > 3 && (
@@ -82,14 +75,49 @@ function AlertCard({
   );
 }
 
+/** Status matrix row — one row per status, with count. */
+function StatusMatrixRow({ status, count, tools, siteFilterIds }: { status: ToolStatus; count: number; tools: Tool[]; siteFilterIds: string[] | null }) {
+  const Icon = TOOL_STATUS_ICON[status];
+  const color = TOOL_STATUS_COLOR[status];
+  const visibleTools = siteFilterIds === null ? tools : tools.filter((t) => t.currentSiteId && siteFilterIds.includes(t.currentSiteId));
+  const visibleCount = siteFilterIds === null ? count : visibleTools.length;
+  return (
+    <Link
+      to={`/ferramentas`}
+      state={{ filterStatus: status }}
+      className="flex items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-white/5"
+    >
+      <IconTile icon={Icon} color={color} size={32} iconSize={15} />
+      <span className="flex-1 text-sm font-semibold text-white">{TOOL_STATUS_LABEL[status]}</span>
+      <span className={cn("text-lg font-bold", COLOR_TEXT[color])}>{visibleCount}</span>
+    </Link>
+  );
+}
+
 export default function Dashboard() {
-  const { db } = useData();
+  const { db, visibleSiteIds } = useData();
   const { profile, isAdmin } = useAuth();
   const [exporting, setExporting] = useState(false);
 
   const companyName = (id: string | null) => (id ? db.companies.find((c) => c.id === id)?.name ?? "" : "");
 
-  // My panel: unified user record, site(s), tools under my responsibility
+  // Transversal filter: standard users only see tools/sites linked to their obras.
+  const siteFilterIds = useMemo(
+    () => (profile ? visibleSiteIds(profile.id, isAdmin) : null),
+    [profile, isAdmin, visibleSiteIds],
+  );
+
+  const visibleTools = useMemo(
+    () => (siteFilterIds === null ? db.tools : db.tools.filter((t) => (t.currentSiteId && siteFilterIds.includes(t.currentSiteId)) || t.currentUserId === profile?.id)),
+    [db.tools, siteFilterIds, profile?.id],
+  );
+
+  const visibleSites = useMemo(
+    () => (siteFilterIds === null ? db.sites : db.sites.filter((s) => siteFilterIds.includes(s.id))),
+    [db.sites, siteFilterIds],
+  );
+
+  // My panel: tools under my responsibility
   const myPanel = useMemo(() => {
     const userRecord = db.users.find((u) => u.id === profile?.id) ?? null;
     if (!userRecord) return null;
@@ -102,12 +130,13 @@ export default function Dashboard() {
       inUse: myTools.filter((t) => effectiveStatus(t) === "inUse").length,
       maintenance: myTools.filter((t) => effectiveStatus(t) === "maintenance").length,
       overdue: myTools.filter((t) => effectiveStatus(t) === "overdue").length,
+      damaged: myTools.filter((t) => effectiveStatus(t) === "damaged").length,
     };
     return { userRecord, myTools, mySites, myToolsByStatus };
   }, [db.users, db.tools, db.sites, profile?.id]);
 
   const stats = useMemo(() => {
-    const activeTools = db.tools.filter((t) => t.baseStatus !== "disabled");
+    const activeTools = visibleTools.filter((t) => t.baseStatus !== "disabled");
     const ownTools = activeTools.filter((t) => t.ownership === "own");
     const rentedTools = activeTools.filter((t) => t.ownership === "rented");
     const clientTools = activeTools.filter((t) => t.ownership === "client");
@@ -116,16 +145,20 @@ export default function Dashboard() {
     const inMaintenance = activeTools.filter((t) => t.baseStatus === "maintenance");
     const inUseTools = activeTools.filter((t) => t.baseStatus === "inUse");
     const availableTools = activeTools.filter((t) => effectiveStatus(t) === "available");
-    const activeSites = db.sites.filter((s) => s.status === "active");
+    const damagedTools = activeTools.filter((t) => t.baseStatus === "damaged");
+    const activeSites = visibleSites.filter((s) => s.status === "active");
     const total = [...rentedTools, ...clientTools].reduce((sum, t) => sum + totalRentalCost(t), 0);
     const auditDueTools = activeTools.filter((t) => isAuditDue(t));
-    return { ownTools, rentedTools, clientTools, overdueTools, endingSoonTools, inMaintenance, inUseTools, availableTools, activeSites, total, auditDueTools };
-  }, [db.tools, db.sites]);
+    return { ownTools, rentedTools, clientTools, overdueTools, endingSoonTools, inMaintenance, inUseTools, availableTools, damagedTools, activeSites, total, auditDueTools };
+  }, [visibleTools, visibleSites]);
 
-  const recentMovements = useMemo(
-    () => [...db.movements].sort((a, b) => b.timestamp.localeCompare(a.timestamp)).slice(0, 5),
-    [db.movements],
-  );
+  const recentMovements = useMemo(() => {
+    const visibleToolIds = new Set(visibleTools.map((t) => t.id));
+    return [...db.movements]
+      .filter((m) => visibleToolIds.has(m.toolId))
+      .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+      .slice(0, 5);
+  }, [db.movements, visibleTools]);
 
   const toolName = (id: string) => db.tools.find((t) => t.id === id)?.name ?? "—";
   const siteName = (id: string | null) => (id ? db.sites.find((s) => s.id === id)?.name ?? "—" : "—");
@@ -139,6 +172,9 @@ export default function Dashboard() {
       setExporting(false);
     }
   };
+
+  const headerCount = siteFilterIds === null ? db.tools.length : visibleTools.length;
+  const headerSites = siteFilterIds === null ? stats.activeSites.length : stats.activeSites.length;
 
   return (
     <PageContainer
@@ -169,10 +205,15 @@ export default function Dashboard() {
         <div>
           <h2 className="text-[28px] font-extrabold leading-tight text-white">Gestão de Ferramentas</h2>
           <p className="text-sm font-medium text-app-muted">
-            {db.tools.length} ferramentas · {stats.activeSites.length} obras ativas
+            {headerCount} ferramentas · {headerSites} obras ativas
           </p>
           {profile && (
             <p className="text-xs text-app-muted/70">Olá, {profile.name || profile.email}</p>
+          )}
+          {!isAdmin && siteFilterIds && (
+            <p className="text-[11px] font-medium text-app-accent/80">
+              Exibindo dados das obras às quais você está vinculado
+            </p>
           )}
         </div>
 
@@ -205,7 +246,6 @@ export default function Dashboard() {
                         <p className="truncate text-sm font-semibold text-white">{site.name}</p>
                         <p className="truncate text-[11px] text-app-muted">{site.address || "Sem endereço"}</p>
                       </div>
-                      <ChevronRight size={14} className="shrink-0 text-app-muted/50" />
                     </Link>
                   ))
                 ) : (
@@ -227,8 +267,8 @@ export default function Dashboard() {
               </div>
 
               {myPanel.myTools.length > 0 && (
-                <div className="grid grid-cols-4 gap-2">
-                  {(["available", "inUse", "maintenance", "overdue"] as const).map((st) => (
+                <div className="grid grid-cols-5 gap-2">
+                  {(["available", "inUse", "maintenance", "damaged", "overdue"] as const).map((st) => (
                     <div key={st} className="flex flex-col items-center rounded-lg bg-app-elevated py-2">
                       <span className={cn("text-lg font-bold", COLOR_TEXT[TOOL_STATUS_COLOR[st]])}>
                         {myPanel.myToolsByStatus[st]}
@@ -240,7 +280,11 @@ export default function Dashboard() {
               )}
 
               {myPanel.myTools.length > 0 && (
-                <Link to="/ferramentas" className="text-center text-xs font-semibold text-app-accent hover:opacity-80">
+                <Link
+                  to="/ferramentas"
+                  state={{ filterResponsible: profile?.id }}
+                  className="text-center text-xs font-semibold text-app-accent hover:opacity-80"
+                >
                   Ver minhas ferramentas →
                 </Link>
               )}
@@ -248,15 +292,39 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Stats grid */}
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-          <StatCard title="Próprias" value={stats.ownTools.length} icon={Wrench} color="accent" />
-          <StatCard title="Alugadas" value={stats.rentedTools.length} icon={KeyRound} color="appOrange" />
-          <StatCard title="Clientes" value={stats.clientTools.length} icon={Users} color="blue" />
-          <StatCard title="Em Uso" value={stats.inUseTools.length} icon={PlayCircle} color="blue" />
-          <StatCard title="Disponíveis" value={stats.availableTools.length} icon={CheckCircle2} color="green" />
-          <StatCard title="Locadoras" value={db.companies.length} icon={Building2} color="accent" />
-          <StatCard title="Usuários" value={db.users.length} icon={Users} color="appOrange" />
+        {/* Status matrix (replaces 7 stat cards) */}
+        <div className="flex flex-col gap-3">
+          <SectionHeader title="Painel-Resumo" />
+          <Card className="flex flex-col gap-1 p-2">
+            <StatusMatrixRow status="available" count={stats.availableTools.length} tools={stats.availableTools} siteFilterIds={siteFilterIds} />
+            <Separator />
+            <StatusMatrixRow status="inUse" count={stats.inUseTools.length} tools={stats.inUseTools} siteFilterIds={siteFilterIds} />
+            <Separator />
+            <StatusMatrixRow status="maintenance" count={stats.inMaintenance.length} tools={stats.inMaintenance} siteFilterIds={siteFilterIds} />
+            <Separator />
+            <StatusMatrixRow status="damaged" count={stats.damagedTools.length} tools={stats.damagedTools} siteFilterIds={siteFilterIds} />
+            <Separator />
+            <StatusMatrixRow status="overdue" count={stats.overdueTools.length} tools={stats.overdueTools} siteFilterIds={siteFilterIds} />
+          </Card>
+
+          {/* Ownership summary */}
+          <Card className="grid grid-cols-3 gap-2 p-3">
+            <div className="flex flex-col items-center rounded-lg bg-app-elevated py-2.5">
+              <IconTile icon={Wrench} color="accent" size={28} iconSize={14} />
+              <span className="mt-1 text-xl font-bold text-white">{stats.ownTools.length}</span>
+              <span className="text-[10px] font-medium text-app-muted">Próprias</span>
+            </div>
+            <div className="flex flex-col items-center rounded-lg bg-app-elevated py-2.5">
+              <IconTile icon={KeyRound} color="appOrange" size={28} iconSize={14} />
+              <span className="mt-1 text-xl font-bold text-white">{stats.rentedTools.length}</span>
+              <span className="text-[10px] font-medium text-app-muted">Alugadas</span>
+            </div>
+            <div className="flex flex-col items-center rounded-lg bg-app-elevated py-2.5">
+              <IconTile icon={Users} color="blue" size={28} iconSize={14} />
+              <span className="mt-1 text-xl font-bold text-white">{stats.clientTools.length}</span>
+              <span className="text-[10px] font-medium text-app-muted">Clientes</span>
+            </div>
+          </Card>
         </div>
 
         {/* Alerts */}
@@ -290,13 +358,36 @@ export default function Dashboard() {
               </Card>
             )}
             {stats.overdueTools.length > 0 && (
-              <AlertCard title={`${stats.overdueTools.length} aluguel(éis) atrasado(s)`} subtitle="Devolução vencida — contate a locadora" icon={AlertTriangle} color="red" tools={stats.overdueTools} companyName={companyName} />
+              <AlertCard
+                title={`${stats.overdueTools.length} aluguel(éis) atrasado(s)`}
+                subtitle="Devolução vencida — contate a locadora"
+                icon={AlertTriangle}
+                color="red"
+                tools={stats.overdueTools}
+                companyName={companyName}
+                showWeekday
+              />
             )}
             {stats.endingSoonTools.length > 0 && (
-              <AlertCard title={`${stats.endingSoonTools.length} aluguel(éis) vencendo`} subtitle="Devolução nos próximos 3 dias" icon={Clock} color="orange" tools={stats.endingSoonTools} companyName={companyName} />
+              <AlertCard
+                title={`${stats.endingSoonTools.length} aluguel(éis) vencendo`}
+                subtitle="Devolução nos próximos 3 dias"
+                icon={Clock}
+                color="orange"
+                tools={stats.endingSoonTools}
+                companyName={companyName}
+                showWeekday
+              />
             )}
             {stats.inMaintenance.length > 0 && (
-              <AlertCard title={`${stats.inMaintenance.length} em manutenção`} subtitle="Ferramentas indisponíveis para uso" icon={Wrench} color="gray" tools={stats.inMaintenance} companyName={companyName} />
+              <AlertCard
+                title={`${stats.inMaintenance.length} em manutenção`}
+                subtitle="Ferramentas indisponíveis para uso"
+                icon={Wrench}
+                color="gray"
+                tools={stats.inMaintenance}
+                companyName={companyName}
+              />
             )}
           </div>
         )}
@@ -335,8 +426,8 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Active sites */}
-        {stats.activeSites.length > 0 && (
+        {/* Active sites — admin only */}
+        {isAdmin && stats.activeSites.length > 0 && (
           <div className="flex flex-col gap-3">
             <SectionHeader title="Obras Ativas" />
             <Card className="flex flex-col gap-2.5">
@@ -349,7 +440,6 @@ export default function Dashboard() {
                       <p className="truncate text-[15px] font-semibold text-white">{site.name}</p>
                       <p className="truncate text-xs text-app-muted">{toolCount} ferramentas · {site.responsibleName}</p>
                     </div>
-                    <ChevronRight size={14} className="shrink-0 text-app-muted/50" />
                   </Link>
                 );
               })}

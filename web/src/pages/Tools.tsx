@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { Calendar, Clock, Hammer, User, Wrench } from "lucide-react";
 import { PageContainer } from "@/components/Layout";
 import {
@@ -89,11 +89,20 @@ function ToolRow({ tool }: { tool: Tool }) {
 
 export default function Tools() {
   const { db } = useData();
+  const location = useLocation();
   const [search, setSearch] = useState("");
   const [filterOwnership, setFilterOwnership] = useState<ToolOwnership | null>(null);
   const [filterStatus, setFilterStatus] = useState<ToolStatus | null>(null);
+  const [filterResponsible, setFilterResponsible] = useState<string | null>(null);
   const [showDisabled, setShowDisabled] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
+
+  // Apply filters passed via router state (from Dashboard "Ver minhas ferramentas" / status matrix).
+  useEffect(() => {
+    const state = location.state as { filterStatus?: ToolStatus; filterResponsible?: string } | null;
+    if (state?.filterStatus) setFilterStatus(state.filterStatus);
+    if (state?.filterResponsible !== undefined) setFilterResponsible(state.filterResponsible ?? null);
+  }, [location.state]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -110,14 +119,28 @@ export default function Tools() {
           tool.serialNumber.toLowerCase().includes(q);
         const matchesOwnership = filterOwnership === null || tool.ownership === filterOwnership;
         const matchesStatus = filterStatus === null || effectiveStatus(tool) === filterStatus;
-        return matchesSearch && matchesOwnership && matchesStatus;
+        const matchesResponsible = filterResponsible === null || tool.currentUserId === filterResponsible;
+        return matchesSearch && matchesOwnership && matchesStatus && matchesResponsible;
       });
-  }, [db.tools, search, filterOwnership, filterStatus, showDisabled]);
+  }, [db.tools, search, filterOwnership, filterStatus, filterResponsible, showDisabled]);
+
+  const clearResponsibleFilter = () => setFilterResponsible(null);
 
   return (
     <PageContainer title="Ferramentas">
       <div className="flex flex-col gap-4 pb-6">
         <SearchInput value={search} onChange={setSearch} placeholder="Nome, marca ou série" />
+
+        {filterResponsible && (
+          <button
+            type="button"
+            onClick={clearResponsibleFilter}
+            className="flex items-center justify-between rounded-lg border border-app-accent/30 bg-app-accent/10 px-3 py-2 text-xs font-semibold text-app-accent"
+          >
+            <span>Filtrado: somente minhas ferramentas</span>
+            <span>Limpar ×</span>
+          </button>
+        )}
 
         <div className="flex gap-2 overflow-x-auto pb-1">
           <FilterChip
@@ -162,6 +185,11 @@ export default function Tools() {
             label="Manutenção"
             isActive={filterStatus === "maintenance"}
             onClick={() => setFilterStatus(filterStatus === "maintenance" ? null : "maintenance")}
+          />
+          <FilterChip
+            label="Avariadas"
+            isActive={filterStatus === "damaged"}
+            onClick={() => setFilterStatus(filterStatus === "damaged" ? null : "damaged")}
           />
           <FilterChip
             label="Desativadas"

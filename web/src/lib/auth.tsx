@@ -42,7 +42,6 @@ function useAuthHook() {
         name: data.name,
         email: data.email ?? null,
         phone: data.phone ?? "",
-        cpf: data.cpf ?? "",
         jobRole: data.job_role ?? "",
         level: data.level ?? "",
         siteId: data.site_id ?? null,

@@ -27,7 +27,6 @@ const emptyUser: UserProfile = {
   name: "",
   email: null,
   phone: "",
-  cpf: "",
   jobRole: "",
   level: "",
   siteId: null,
@@ -147,16 +146,10 @@ function UserEditDialog({
             <span className="text-xs font-semibold uppercase tracking-wide text-app-muted">Nome completo *</span>
             <input className={inputClass} value={form.name} onChange={(e) => update("name", e.target.value)} placeholder="Ex: João Pereira" />
           </label>
-          <div className="grid grid-cols-2 gap-3">
-            <label className="flex flex-col gap-1.5">
-              <span className="text-xs font-semibold uppercase tracking-wide text-app-muted">CPF</span>
-              <input className={inputClass} value={form.cpf} onChange={(e) => update("cpf", e.target.value)} placeholder="000.000.000-00" />
-            </label>
-            <label className="flex flex-col gap-1.5">
-              <span className="text-xs font-semibold uppercase tracking-wide text-app-muted">Telefone</span>
-              <input className={inputClass} value={form.phone} onChange={(e) => update("phone", e.target.value)} placeholder="(11) 98888-1111" />
-            </label>
-          </div>
+          <label className="flex flex-col gap-1.5">
+            <span className="text-xs font-semibold uppercase tracking-wide text-app-muted">Telefone</span>
+            <input className={inputClass} value={form.phone} onChange={(e) => update("phone", e.target.value)} placeholder="(11) 98888-1111" />
+          </label>
 
           {/* Job */}
           <p className="text-xs font-bold uppercase tracking-wider text-app-accent">Cargo / Lotação</p>
@@ -311,7 +304,7 @@ export default function Users() {
     const q = search.trim().toLowerCase();
     return [...db.users]
       .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))
-      .filter((u) => q === "" || u.name.toLowerCase().includes(q) || (u.email ?? "").toLowerCase().includes(q) || u.cpf.toLowerCase().includes(q));
+      .filter((u) => q === "" || u.name.toLowerCase().includes(q) || (u.email ?? "").toLowerCase().includes(q));
   }, [db.users, search]);
 
   return (

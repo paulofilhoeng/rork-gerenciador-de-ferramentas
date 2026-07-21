@@ -34,29 +34,55 @@ export default function Reports() {
   const [actSite, setActSite] = useState<string>("");
   const [actStart, setActStart] = useState("");
   const [actEnd, setActEnd] = useState("");
+  const [actWorkshop, setActWorkshop] = useState<string>("");
 
   // Audit filters
   const [audTool, setAudTool] = useState<string>("");
 
-  const filteredActivities = db.activityLogs.filter((log) => {
-    if (actUser && log.userId !== actUser && log.userEmail !== actUser) return false;
-    if (actAction && log.action !== actAction) return false;
-    if (actSite && log.siteId !== actSite) return false;
-    if (actStart && new Date(log.createdAt) < new Date(actStart)) return false;
-    if (actEnd && new Date(log.createdAt) > new Date(actEnd + "T23:59:59")) return false;
-    return true;
-  });
+  // Only compute filtered results on demand (user clicks "Exportar").
+  const [actResults, setActResults] = useState<typeof db.activityLogs | null>(null);
+  const [audResults, setAudResults] = useState<typeof db.audits | null>(null);
 
-  const filteredAudits = db.audits
-    .filter((a) => !audTool || a.toolId === audTool)
-    .sort((a, b) => b.auditDate.localeCompare(a.auditDate));
+  const computeActivities = () => {
+    const result = db.activityLogs.filter((log) => {
+      if (actUser && log.userId !== actUser && log.userEmail !== actUser) return false;
+      if (actAction && log.action !== actAction) return false;
+      if (actSite && log.siteId !== actSite) return false;
+      if (actStart && new Date(log.createdAt) < new Date(actStart)) return false;
+      if (actEnd && new Date(log.createdAt) > new Date(actEnd + "T23:59:59")) return false;
+      if (actWorkshop) {
+        // Filter activity logs related to tools at the selected workshop.
+        const toolsAtWorkshop = db.tools.filter((t) => t.workshopId === actWorkshop);
+        const toolIds = new Set(toolsAtWorkshop.map((t) => t.id));
+        const entityMatches = log.entityType === "workshop" && log.entityId === actWorkshop
+          || (log.newValues as { tool?: string } | null)?.tool && toolIds.has((log.newValues as { tool: string }).tool);
+        if (!entityMatches) return false;
+      }
+      return true;
+    });
+    setActResults(result);
+  };
+
+  const computeAudits = () => {
+    const result = db.audits
+      .filter((a) => !audTool || a.toolId === audTool)
+      .sort((a, b) => b.auditDate.localeCompare(a.auditDate));
+    setAudResults(result);
+  };
 
   const toolName = (id: string) => db.tools.find((t) => t.id === id)?.name ?? "—";
+  const toolLastUser = (id: string) => db.tools.find((t) => t.id === id)?.lastUser ?? "";
+  const toolWorkshopName = (id: string) => {
+    const t = db.tools.find((t) => t.id === id);
+    if (!t?.workshopId) return "";
+    return db.workshops.find((w) => w.id === t.workshopId)?.name ?? "";
+  };
   const siteName = (id: string | null) => (id ? db.sites.find((s) => s.id === id)?.name ?? "—" : "—");
 
   const exportActivities = () => {
+    const rows = actResults ?? [];
     let csv = "Data/Hora;Usuario;E-mail;Acao;Entidade;Registro;Obra\n";
-    for (const log of filteredActivities) {
+    for (const log of rows) {
       csv += [
         formatDateTime(log.createdAt),
         log.userName,
@@ -73,13 +99,16 @@ export default function Reports() {
   };
 
   const exportAudits = async () => {
-    let csv = "Data/Hora;Ferramenta;Status;Descricao Avaria;Auditor;Proxima Auditoria\n";
-    for (const audit of filteredAudits) {
+    const auditsToExport = audResults ?? [];
+    let csv = "Data/Hora;Ferramenta;Status;Descricao Avaria;Ultimo Usuario (obra);Oficina;Auditor;Proxima Auditoria\n";
+    for (const audit of auditsToExport) {
       csv += [
         formatDateTime(audit.auditDate),
         toolName(audit.toolId),
         AUDIT_STATUS_LABEL[audit.status],
         audit.damageDescription || "—",
+        toolLastUser(audit.toolId) || "—",
+        toolWorkshopName(audit.toolId) || "—",
         audit.userName,
         audit.nextAuditDate ? formatShortDate(audit.nextAuditDate) : "—",
       ].join(";") + "\n";
@@ -87,7 +116,7 @@ export default function Reports() {
 
     // Also include maintenance records with invoice info
     csv += "\n\nManutencoes\n";
-    csv += "Ferramenta;Inicio;Retorno;Custo;Nota Fiscal;Responsavel;Status\n";
+    csv += "Ferramenta;Inicio;Retorno;Custo;Nota Fiscal;Oficina;Responsavel;Status\n";
     for (const m of db.maintenance) {
       csv += [
         toolName(m.toolId),
@@ -95,8 +124,24 @@ export default function Reports() {
         m.returnDate ? formatShortDate(m.returnDate) : "—",
         m.repairCost.toFixed(2),
         m.invoiceNumber || "—",
+        toolWorkshopName(m.toolId) || "—",
         m.userName,
         m.status === "active" ? "Em Manutencao" : "Concluida",
+      ].join(";") + "\n";
+    }
+
+    // Workshops summary
+    csv += "\n\nOficinas\n";
+    csv += "Nome;Endereco;Telefone;Contato 1;Contato 2;Ferramentas em Manutencao\n";
+    for (const w of db.workshops) {
+      const inMaintenance = db.tools.filter((t) => t.workshopId === w.id && t.baseStatus === "maintenance").length;
+      csv += [
+        w.name,
+        w.address,
+        w.phone,
+        w.contact1Name ? `${w.contact1Name} (${w.contact1Phone})` : "—",
+        w.contact2Name ? `${w.contact2Name} (${w.contact2Phone})` : "—",
+        String(inMaintenance),
       ].join(";") + "\n";
     }
 
@@ -163,6 +208,12 @@ export default function Reports() {
                   ))}
                 </select>
               </div>
+              <select className={inputClass} value={actWorkshop} onChange={(e) => setActWorkshop(e.target.value)}>
+                <option value="">Todas as oficinas</option>
+                {db.workshops.map((w) => (
+                  <option key={w.id} value={w.id}>{w.name}</option>
+                ))}
+              </select>
               <div className="flex flex-wrap gap-2">
                 <FilterChip label="Todas" isActive={actAction === ""} onClick={() => setActAction("")} />
                 {(Object.keys(ACTIVITY_ACTION_LABEL) as ActivityAction[]).map((action) => (
@@ -180,43 +231,55 @@ export default function Reports() {
               </div>
               <button
                 type="button"
-                onClick={exportActivities}
-                className="flex items-center justify-center gap-2 rounded-xl bg-app-accent py-2.5 text-sm font-bold text-app-bg hover:opacity-90"
+                onClick={computeActivities}
+                className="flex items-center justify-center gap-2 rounded-xl border-[0.5px] border-app-separator bg-app-elevated py-2.5 text-sm font-semibold text-white hover:bg-white/5"
               >
-                <Download size={15} /> Exportar CSV ({filteredActivities.length})
+                <Filter size={15} /> Gerar Relatório
               </button>
+              {actResults !== null && (
+                <button
+                  type="button"
+                  onClick={exportActivities}
+                  disabled={actResults.length === 0}
+                  className="flex items-center justify-center gap-2 rounded-xl bg-app-accent py-2.5 text-sm font-bold text-app-bg hover:opacity-90 disabled:opacity-50"
+                >
+                  <Download size={15} /> Exportar CSV ({actResults.length})
+                </button>
+              )}
             </Card>
 
-            {/* Activity list */}
-            <Card className="flex flex-col">
-              {filteredActivities.length === 0 ? (
-                <p className="py-6 text-center text-sm text-app-muted">Nenhuma atividade encontrada com os filtros aplicados.</p>
-              ) : (
-                filteredActivities.slice(0, 100).map((log, i) => {
-                  const color = ACTIVITY_ACTION_COLOR[log.action];
-                  return (
-                    <div key={log.id}>
-                      <div className="flex items-start gap-3 py-2">
-                        <IconTile icon={Filter} color={color} size={30} iconSize={13} />
-                        <div className="min-w-0 flex-1">
-                          <p className={`text-sm font-semibold ${COLOR_TEXT[color]}`}>{ACTIVITY_ACTION_LABEL[log.action]}</p>
-                          <p className="truncate text-xs text-app-muted">
-                            {log.entityName} ({log.entityType})
-                          </p>
-                          <p className="text-[11px] text-app-muted/60">
-                            {log.userName} · {formatDateTime(log.createdAt)}
-                          </p>
+            {/* Activity list — only shown after user clicks "Gerar Relatório" */}
+            {actResults !== null && (
+              <Card className="flex flex-col">
+                {actResults.length === 0 ? (
+                  <p className="py-6 text-center text-sm text-app-muted">Nenhuma atividade encontrada com os filtros aplicados.</p>
+                ) : (
+                  actResults.slice(0, 100).map((log, i) => {
+                    const color = ACTIVITY_ACTION_COLOR[log.action];
+                    return (
+                      <div key={log.id}>
+                        <div className="flex items-start gap-3 py-2">
+                          <IconTile icon={Filter} color={color} size={30} iconSize={13} />
+                          <div className="min-w-0 flex-1">
+                            <p className={`text-sm font-semibold ${COLOR_TEXT[color]}`}>{ACTIVITY_ACTION_LABEL[log.action]}</p>
+                            <p className="truncate text-xs text-app-muted">
+                              {log.entityName} ({log.entityType})
+                            </p>
+                            <p className="text-[11px] text-app-muted/60">
+                              {log.userName} · {formatDateTime(log.createdAt)}
+                            </p>
+                          </div>
                         </div>
+                        {i < Math.min(actResults.length, 100) - 1 && <Separator />}
                       </div>
-                      {i < Math.min(filteredActivities.length, 100) - 1 && <Separator />}
-                    </div>
-                  );
-                })
-              )}
-              {filteredActivities.length > 100 && (
-                <p className="pt-2 text-xs text-app-muted">+ {filteredActivities.length - 100} registros anteriores</p>
-              )}
-            </Card>
+                    );
+                  })
+                )}
+                {actResults.length > 100 && (
+                  <p className="pt-2 text-xs text-app-muted">+ {actResults.length - 100} registros anteriores</p>
+                )}
+              </Card>
+            )}
           </>
         ) : (
           <>
@@ -231,46 +294,64 @@ export default function Reports() {
               </select>
               <button
                 type="button"
-                onClick={() => void exportAudits()}
-                className="flex items-center justify-center gap-2 rounded-xl bg-app-accent py-2.5 text-sm font-bold text-app-bg hover:opacity-90"
+                onClick={computeAudits}
+                className="flex items-center justify-center gap-2 rounded-xl border-[0.5px] border-app-separator bg-app-elevated py-2.5 text-sm font-semibold text-white hover:bg-white/5"
               >
-                <Download size={15} /> Exportar ({filteredAudits.length + db.maintenance.length})
+                <Filter size={15} /> Gerar Relatório
               </button>
-            </Card>
-
-            {/* Audit list */}
-            <Card className="flex flex-col">
-              <SectionHeader title="Histórico de Auditorias" count={filteredAudits.length} />
-              {filteredAudits.length === 0 ? (
-                <p className="py-6 text-center text-sm text-app-muted">Nenhuma auditoria registrada.</p>
-              ) : (
-                filteredAudits.slice(0, 100).map((audit, i) => (
-                  <div key={audit.id}>
-                    <div className="flex items-start gap-3 py-2">
-                      <IconTile
-                        icon={audit.status === "confirmed" ? ClipboardList : Wrench}
-                        color={audit.status === "confirmed" ? "green" : "red"}
-                        size={30}
-                        iconSize={13}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-white">{toolName(audit.toolId)}</p>
-                        <p className={`text-xs font-medium ${audit.status === "confirmed" ? "text-status-green" : "text-status-red"}`}>
-                          {AUDIT_STATUS_LABEL[audit.status]}
-                        </p>
-                        {audit.damageDescription && (
-                          <p className="text-xs text-app-muted">Falha: {audit.damageDescription}</p>
-                        )}
-                        <p className="text-[11px] text-app-muted/60">
-                          {audit.userName} · {formatDateTime(audit.auditDate)}
-                        </p>
-                      </div>
-                    </div>
-                    {i < Math.min(filteredAudits.length, 100) - 1 && <Separator />}
-                  </div>
-                ))
+              {audResults !== null && (
+                <button
+                  type="button"
+                  onClick={() => void exportAudits()}
+                  disabled={audResults.length === 0 && db.maintenance.length === 0}
+                  className="flex items-center justify-center gap-2 rounded-xl bg-app-accent py-2.5 text-sm font-bold text-app-bg hover:opacity-90 disabled:opacity-50"
+                >
+                  <Download size={15} /> Exportar ({audResults.length + db.maintenance.length})
+                </button>
               )}
             </Card>
+
+            {/* Audit list — only shown after user clicks "Gerar Relatório" */}
+            {audResults !== null && (
+              <Card className="flex flex-col">
+                <SectionHeader title="Histórico de Auditorias" count={audResults.length} />
+                {audResults.length === 0 ? (
+                  <p className="py-6 text-center text-sm text-app-muted">Nenhuma auditoria registrada.</p>
+                ) : (
+                  audResults.slice(0, 100).map((audit, i) => (
+                    <div key={audit.id}>
+                      <div className="flex items-start gap-3 py-2">
+                        <IconTile
+                          icon={audit.status === "confirmed" ? ClipboardList : Wrench}
+                          color={audit.status === "confirmed" ? "green" : "red"}
+                          size={30}
+                          iconSize={13}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-white">{toolName(audit.toolId)}</p>
+                          <p className={`text-xs font-medium ${audit.status === "confirmed" ? "text-status-green" : "text-status-red"}`}>
+                            {AUDIT_STATUS_LABEL[audit.status]}
+                          </p>
+                          {audit.damageDescription && (
+                            <p className="text-xs text-app-muted">Falha: {audit.damageDescription}</p>
+                          )}
+                          {toolLastUser(audit.toolId) && (
+                            <p className="text-xs text-app-muted/80">Último usuário: {toolLastUser(audit.toolId)}</p>
+                          )}
+                          {toolWorkshopName(audit.toolId) && (
+                            <p className="text-xs text-app-muted/80">Oficina: {toolWorkshopName(audit.toolId)}</p>
+                          )}
+                          <p className="text-[11px] text-app-muted/60">
+                            {audit.userName} · {formatDateTime(audit.auditDate)}
+                          </p>
+                        </div>
+                      </div>
+                      {i < Math.min(audResults.length, 100) - 1 && <Separator />}
+                    </div>
+                  ))
+                )}
+              </Card>
+            )}
 
             {/* Maintenance history */}
             {db.maintenance.length > 0 && (

@@ -1,7 +1,7 @@
 /** Shared domain types for ToolsLoc — now backed by Supabase. */
 
 export type ToolOwnership = "own" | "rented" | "client";
-export type ToolStatus = "available" | "inUse" | "maintenance" | "overdue" | "disabled";
+export type ToolStatus = "available" | "inUse" | "maintenance" | "overdue" | "disabled" | "damaged";
 export type RentalPeriod = "daily" | "weekly" | "monthly";
 export type SiteStatus = "active" | "paused" | "completed";
 export type AttachmentType = "photo" | "video";
@@ -39,7 +39,10 @@ export type MovementType =
   | "auditConfirmed"
   | "auditDamaged"
   | "maintenanceStarted"
-  | "maintenanceReturned";
+  | "maintenanceReturned"
+  | "markedDamaged"
+  | "unmarkedDamaged"
+  | "workshopAssigned";
 
 export const OWNERSHIP_LABEL: Record<ToolOwnership, string> = {
   own: "Própria",
@@ -50,9 +53,10 @@ export const OWNERSHIP_LABEL: Record<ToolOwnership, string> = {
 export const TOOL_STATUS_LABEL: Record<ToolStatus, string> = {
   available: "Disponível",
   inUse: "Em Uso",
-  maintenance: "Manutenção",
+  maintenance: "Em Manutenção",
   overdue: "Atrasada",
   disabled: "Desativada",
+  damaged: "Avariada",
 };
 
 export const TOOL_STATUS_COLOR: Record<ToolStatus, StatusColor> = {
@@ -61,6 +65,7 @@ export const TOOL_STATUS_COLOR: Record<ToolStatus, StatusColor> = {
   maintenance: "gray",
   overdue: "red",
   disabled: "gray",
+  damaged: "orange",
 };
 
 export const RENTAL_PERIOD_LABEL: Record<RentalPeriod, string> = {
@@ -105,6 +110,9 @@ export const MOVEMENT_LABEL: Record<MovementType, string> = {
   auditDamaged: "Avaria Registrada",
   maintenanceStarted: "Enviada para Manutenção",
   maintenanceReturned: "Retorno de Manutenção",
+  markedDamaged: "Marcada como Avariada",
+  unmarkedDamaged: "Avaria Removida",
+  workshopAssigned: "Oficina Atribuída",
 };
 
 export const MOVEMENT_COLOR: Record<MovementType, StatusColor> = {
@@ -124,6 +132,9 @@ export const MOVEMENT_COLOR: Record<MovementType, StatusColor> = {
   auditDamaged: "red",
   maintenanceStarted: "orange",
   maintenanceReturned: "green",
+  markedDamaged: "orange",
+  unmarkedDamaged: "green",
+  workshopAssigned: "orange",
 };
 
 export const ATTACHMENT_PURPOSE_LABEL: Record<AttachmentPurpose, string> = {
@@ -207,6 +218,12 @@ export interface Tool {
   rentalCompanyId: string | null;
   currentSiteId: string | null;
   currentUserId: string | null;
+  /** Workshop where the tool is being repaired (when baseStatus === 'maintenance'). */
+  workshopId: string | null;
+  /** Free-text observation describing the damage (set when baseStatus === 'damaged'). */
+  damageObs: string;
+  /** Free-text identifying the last user on the site (for damage reports). Not a system user. */
+  lastUser: string;
   auditFrequency: AuditFrequency;
   lastAuditDate: string | null;
   nextAuditDate: string | null;
@@ -220,6 +237,20 @@ export interface RentalCompany {
   email: string;
   address: string;
   contactPerson: string;
+  createdAt: string;
+}
+
+/** Workshop (oficina) where tools are sent for maintenance. */
+export interface Workshop {
+  id: string;
+  name: string;
+  address: string;
+  phone: string;
+  contact1Name: string;
+  contact1Phone: string;
+  contact2Name: string;
+  contact2Phone: string;
+  notes: string;
   createdAt: string;
 }
 
@@ -264,7 +295,6 @@ export interface UserProfile {
   name: string;
   email: string | null;
   phone: string;
-  cpf: string;
   jobRole: string;
   level: string;
   siteId: string | null;
@@ -343,6 +373,7 @@ export interface SiteUserPermission {
 export interface DB {
   tools: Tool[];
   companies: RentalCompany[];
+  workshops: Workshop[];
   sites: ConstructionSite[];
   movements: ToolMovement[];
   attachments: ToolAttachment[];
@@ -366,6 +397,7 @@ export function isRentalTracked(tool: Tool): boolean {
 
 export function effectiveStatus(tool: Tool): ToolStatus {
   if (tool.baseStatus === "disabled") return "disabled";
+  if (tool.baseStatus === "damaged") return "damaged";
   if (isRentalTracked(tool) && tool.rentalEndDate && new Date(tool.rentalEndDate).getTime() < Date.now()) {
     return "overdue";
   }
@@ -398,14 +430,14 @@ export function isRentalEndingSoon(tool: Tool): boolean {
 
 /** Whether the audit due date has passed (disabled tools are never due). */
 export function isAuditDue(tool: Tool): boolean {
-  if (tool.baseStatus === "disabled") return false;
+  if (tool.baseStatus === "disabled" || tool.baseStatus === "damaged" || tool.baseStatus === "maintenance") return false;
   if (!tool.nextAuditDate) return false;
   return new Date(tool.nextAuditDate).getTime() < Date.now();
 }
 
 /** Days until the next audit (negative = overdue). Returns null for disabled tools. */
 export function auditDaysRemaining(tool: Tool): number | null {
-  if (tool.baseStatus === "disabled") return null;
+  if (tool.baseStatus === "disabled" || tool.baseStatus === "damaged" || tool.baseStatus === "maintenance") return null;
   if (!tool.nextAuditDate) return null;
   const diff = new Date(tool.nextAuditDate).getTime() - Date.now();
   return diff >= 0 ? Math.floor(diff / DAY_MS) : -Math.ceil(-diff / DAY_MS);
@@ -422,6 +454,7 @@ export function computeNextAuditDate(frequency: AuditFrequency, from: Date = new
 export function auditStatusLabel(tool: Tool): string {
   if (tool.baseStatus === "disabled") return "Desativada";
   if (tool.baseStatus === "maintenance") return "Em Manutenção";
+  if (tool.baseStatus === "damaged") return "Avariada";
   const days = auditDaysRemaining(tool);
   if (days === null) return "Sem auditoria";
   if (days < 0) return `Atrasada ${Math.abs(days)}d`;
@@ -432,6 +465,7 @@ export function auditStatusLabel(tool: Tool): string {
 export function auditStatusColor(tool: Tool): StatusColor {
   if (tool.baseStatus === "disabled") return "gray";
   if (tool.baseStatus === "maintenance") return "gray";
+  if (tool.baseStatus === "damaged") return "orange";
   const days = auditDaysRemaining(tool);
   if (days === null) return "gray";
   if (days < 0) return "red";

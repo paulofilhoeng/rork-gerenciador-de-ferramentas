@@ -257,7 +257,6 @@ export type Database = {
         Row: {
           active: boolean
           auth_user_id: string | null
-          cpf: string | null
           created_at: string | null
           email: string | null
           has_login_access: boolean | null
@@ -273,7 +272,6 @@ export type Database = {
         Insert: {
           active?: boolean
           auth_user_id?: string | null
-          cpf?: string | null
           created_at?: string | null
           email?: string | null
           has_login_access?: boolean | null
@@ -289,7 +287,6 @@ export type Database = {
         Update: {
           active?: boolean
           auth_user_id?: string | null
-          cpf?: string | null
           created_at?: string | null
           email?: string | null
           has_login_access?: boolean | null
@@ -498,8 +495,10 @@ export type Database = {
           current_site_id: string | null
           current_user_id: string | null
           daily_rental_cost: number | null
+          damage_obs: string | null
           id: string
           last_audit_date: string | null
+          last_user: string | null
           model: string | null
           name: string
           next_audit_date: string | null
@@ -512,6 +511,7 @@ export type Database = {
           rental_start_date: string | null
           serial_number: string | null
           status_updated_at: string | null
+          workshop_id: string | null
         }
         Insert: {
           audit_frequency?: string | null
@@ -521,8 +521,10 @@ export type Database = {
           current_site_id?: string | null
           current_user_id?: string | null
           daily_rental_cost?: number | null
+          damage_obs?: string | null
           id?: string
           last_audit_date?: string | null
+          last_user?: string | null
           model?: string | null
           name: string
           next_audit_date?: string | null
@@ -535,6 +537,7 @@ export type Database = {
           rental_start_date?: string | null
           serial_number?: string | null
           status_updated_at?: string | null
+          workshop_id?: string | null
         }
         Update: {
           audit_frequency?: string | null
@@ -544,8 +547,10 @@ export type Database = {
           current_site_id?: string | null
           current_user_id?: string | null
           daily_rental_cost?: number | null
+          damage_obs?: string | null
           id?: string
           last_audit_date?: string | null
+          last_user?: string | null
           model?: string | null
           name?: string
           next_audit_date?: string | null
@@ -558,6 +563,7 @@ export type Database = {
           rental_start_date?: string | null
           serial_number?: string | null
           status_updated_at?: string | null
+          workshop_id?: string | null
         }
         Relationships: [
           {
@@ -582,6 +588,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      workshops: {
+        Row: {
+          address: string
+          contact1_name: string
+          contact1_phone: string
+          contact2_name: string
+          contact2_phone: string
+          created_at: string
+          id: string
+          name: string
+          notes: string
+          phone: string
+        }
+        Insert: {
+          address?: string
+          contact1_name?: string
+          contact1_phone?: string
+          contact2_name?: string
+          contact2_phone?: string
+          created_at?: string
+          id?: string
+          name: string
+          notes?: string
+          phone?: string
+        }
+        Update: {
+          address?: string
+          contact1_name?: string
+          contact1_phone?: string
+          contact2_name?: string
+          contact2_phone?: string
+          created_at?: string
+          id?: string
+          name?: string
+          notes?: string
+          phone?: string
+        }
+        Relationships: []
       }
     }
     Views: {

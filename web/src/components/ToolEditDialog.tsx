@@ -82,6 +82,9 @@ export function ToolEditDialog({ tool, open, onClose }: Props) {
       rentalCompanyId: companyId || null,
       currentSiteId: isAdmin ? siteId || null : (tool?.currentSiteId ?? null),
       currentUserId: userId || null,
+      workshopId: tool?.workshopId ?? null,
+      damageObs: tool?.damageObs ?? "",
+      lastUser: tool?.lastUser ?? "",
       auditFrequency,
       lastAuditDate: tool?.lastAuditDate ?? null,
       nextAuditDate: tool?.nextAuditDate ?? computeNextAuditDate(auditFrequency),
@@ -181,8 +184,9 @@ export function ToolEditDialog({ tool, open, onClose }: Props) {
               <select className={inputClass} value={baseStatus} onChange={(e) => setBaseStatus(e.target.value as ToolStatus)}>
                 <option value="available">Disponível</option>
                 <option value="inUse">Em Uso</option>
-                <option value="maintenance">Manutenção</option>
+                <option value="maintenance">Em Manutenção</option>
                 <option value="overdue">Atrasada</option>
+                <option value="damaged">Avariada</option>
                 <option value="disabled">Desativada</option>
               </select>
             </Field>

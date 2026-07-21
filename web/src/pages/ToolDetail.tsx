@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowDownCircle, ArrowLeft, ArrowUpCircle, ClipboardCheck, Clock, Download, Hammer, Power, Trash2, User, Wrench } from "lucide-react";
+import { ArrowDownCircle, ArrowLeft, ArrowUpCircle, AlertTriangle, Building2, CheckCircle2, ClipboardCheck, Clock, Download, Hammer, Power, Trash2, User, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -12,6 +12,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageContainer } from "@/components/Layout";
 import {
   COLOR_BG_SOFT,
@@ -19,11 +20,13 @@ import {
   COLOR_BORDER,
   Card,
   DetailRow,
+  Field,
   IconTile,
   MOVEMENT_ICON,
   SectionHeader,
   Separator,
   TOOL_STATUS_ICON,
+  inputClass,
 } from "@/components/shared";
 import {
   AttachmentGrid,
@@ -64,7 +67,7 @@ import { cn } from "@/lib/utils";
 export default function ToolDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { db, deleteTool, saveTool, addMovements, addAttachments, removeAttachment, startMaintenance, hasPermission } = useData();
+  const { db, deleteTool, saveTool, addMovements, addAttachments, removeAttachment, startMaintenance, markDamaged, unmarkDamaged, assignToWorkshop, hasPermission } = useData();
   const { isAdmin, profile } = useAuth();
 
   const [showEdit, setShowEdit] = useState(false);
@@ -73,6 +76,11 @@ export default function ToolDetail() {
   const [validationOp, setValidationOp] = useState<ValidationOperation | null>(null);
   const [showAudit, setShowAudit] = useState(false);
   const [showReturn, setShowReturn] = useState(false);
+  const [showDamaged, setShowDamaged] = useState(false);
+  const [showWorkshop, setShowWorkshop] = useState(false);
+  const [damageObs, setDamageObs] = useState("");
+  const [lastUser, setLastUser] = useState("");
+  const [selectedWorkshop, setSelectedWorkshop] = useState("");
 
   const tool = db.tools.find((t) => t.id === id);
 
@@ -108,7 +116,9 @@ export default function ToolDetail() {
   const user = tool.currentUserId ? db.users.find((u) => u.id === tool.currentUserId) : null;
   const isInMaintenance = tool.baseStatus === "maintenance";
   const isDisabled = tool.baseStatus === "disabled";
+  const isDamaged = tool.baseStatus === "damaged";
   const hasActiveMaintenance = maintenanceRecords.some((m) => m.status === "active");
+  const workshop = tool.workshopId ? db.workshops.find((w) => w.id === tool.workshopId) : null;
 
   const handleValidationConfirm = (newAttachments: ToolAttachment[]) => {
     if (!validationOp) return;
@@ -159,6 +169,35 @@ export default function ToolDetail() {
         userName: "",
       },
     ]);
+  };
+
+  const handleMarkDamaged = () => {
+    if (!damageObs.trim()) {
+      toast.error("Descreva a avaria");
+      return;
+    }
+    setShowDamaged(false);
+    toast.success("Ferramenta marcada como Avariada");
+    void markDamaged(tool.id, damageObs.trim(), lastUser.trim());
+    setDamageObs("");
+    setLastUser("");
+  };
+
+  const handleUnmarkDamaged = () => {
+    toast.success("Avaria removida — ferramenta disponível");
+    void unmarkDamaged(tool.id);
+  };
+
+  const handleAssignToWorkshop = () => {
+    if (!selectedWorkshop) {
+      toast.error("Selecione uma oficina");
+      return;
+    }
+    setShowWorkshop(false);
+    const workshopName = db.workshops.find((w) => w.id === selectedWorkshop)?.name ?? "Oficina";
+    toast.success(`Ferramenta enviada para ${workshopName}`);
+    void assignToWorkshop(tool.id, selectedWorkshop);
+    setSelectedWorkshop("");
   };
 
   return (
@@ -213,25 +252,43 @@ export default function ToolDetail() {
               Ferramenta desativada — auditorias suspensas
             </p>
           )}
-          <div className="flex gap-2 pt-1">
+          <div className="flex flex-wrap gap-2 pt-1">
             <button
               type="button"
               onClick={() => setShowAudit(true)}
-              disabled={isInMaintenance || isDisabled}
+              disabled={isInMaintenance || isDisabled || isDamaged}
               className={cn(
                 "flex flex-1 items-center justify-center gap-2 rounded-[10px] py-2.5 text-sm font-semibold transition-colors",
-                isInMaintenance || isDisabled ? "cursor-not-allowed bg-app-elevated text-app-muted/50" : "bg-app-accent/15 text-app-accent hover:bg-app-accent/25",
+                isInMaintenance || isDisabled || isDamaged ? "cursor-not-allowed bg-app-elevated text-app-muted/50" : "bg-app-accent/15 text-app-accent hover:bg-app-accent/25",
               )}
             >
               <ClipboardCheck size={15} /> Realizar Auditoria
             </button>
-            {!hasActiveMaintenance && !isInMaintenance && !isDisabled && (
+            {!isDamaged && !hasActiveMaintenance && !isInMaintenance && !isDisabled && (
               <button
                 type="button"
-                onClick={() => void handleStartMaintenance()}
+                onClick={() => setShowDamaged(true)}
                 className="flex items-center justify-center gap-2 rounded-[10px] bg-status-orange/15 px-3 py-2.5 text-sm font-semibold text-status-orange hover:bg-status-orange/25"
               >
-                <Wrench size={15} /> Manutenção
+                <AlertTriangle size={15} /> Avariada
+              </button>
+            )}
+            {isDamaged && (
+              <button
+                type="button"
+                onClick={() => handleUnmarkDamaged()}
+                className="flex items-center justify-center gap-2 rounded-[10px] bg-status-green/15 px-3 py-2.5 text-sm font-semibold text-status-green hover:bg-status-green/25"
+              >
+                <CheckCircle2 size={15} /> Remover Avaria
+              </button>
+            )}
+            {isDamaged && isAdmin && (
+              <button
+                type="button"
+                onClick={() => setShowWorkshop(true)}
+                className="flex items-center justify-center gap-2 rounded-[10px] bg-app-accent/15 px-3 py-2.5 text-sm font-semibold text-app-accent hover:bg-app-accent/25"
+              >
+                <Building2 size={15} /> Enviar para Oficina
               </button>
             )}
             {hasActiveMaintenance && (
@@ -245,6 +302,29 @@ export default function ToolDetail() {
             )}
           </div>
         </Card>
+
+        {/* Damaged observation card */}
+        {isDamaged && tool.damageObs && (
+          <Card className="flex flex-col gap-2 border-status-orange/30">
+            <SectionHeader title="Avaria Registrada" />
+            <DetailRow label="Observação" value={tool.damageObs} />
+            {tool.lastUser && <DetailRow label="Último Usuário (obra)" value={tool.lastUser} />}
+          </Card>
+        )}
+
+        {/* Workshop info */}
+        {workshop && isInMaintenance && (
+          <Card className="flex flex-col gap-2">
+            <SectionHeader title="Oficina" />
+            <Link to={`/oficinas/${workshop.id}`} className="flex items-center gap-3">
+              <IconTile icon={Building2} color="accent" size={32} iconSize={16} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[15px] font-semibold text-white">{workshop.name}</p>
+                <p className="truncate text-xs text-app-muted">{workshop.address || "Sem endereço"}</p>
+              </div>
+            </Link>
+          </Card>
+        )}
 
         {/* Ownership / rental card */}
         <Card className="flex flex-col gap-2.5">
@@ -456,6 +536,13 @@ export default function ToolDetail() {
           </button>
         )}
 
+        {/* Damaged tool: ADM can send to workshop */}
+        {isDamaged && isAdmin && db.workshops.length === 0 && (
+          <p className="rounded-lg bg-app-elevated p-3 text-xs text-app-muted">
+            Nenhuma oficina cadastrada. Cadastre uma oficina em “Oficinas” antes de enviar a ferramenta.
+          </p>
+        )}
+
         {/* Delete */}
         {isAdmin && (
           <button type="button" onClick={() => setShowDelete(true)} className="flex items-center justify-center gap-2 rounded-xl bg-status-red/10 py-3.5 text-[15px] font-semibold text-status-red hover:bg-status-red/20">
@@ -465,6 +552,82 @@ export default function ToolDetail() {
       </div>
 
       <ToolEditDialog tool={tool} open={showEdit} onClose={() => setShowEdit(false)} />
+
+      {/* Mark as damaged dialog */}
+      <Dialog open={showDamaged} onOpenChange={(o) => !o && setShowDamaged(false)}>
+        <DialogContent className="max-w-md border-app-separator bg-app-card">
+          <DialogHeader>
+            <DialogTitle className="text-white">Marcar como Avariada</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-app-muted">
+            Ferramenta: <span className="font-semibold text-white">{tool.name}</span>
+          </p>
+          <div className="flex flex-col gap-3">
+            <Field label="Observação da Avaria *">
+              <textarea
+                className={inputClass}
+                rows={3}
+                value={damageObs}
+                onChange={(e) => setDamageObs(e.target.value)}
+                placeholder="Descreva a avaria/falha encontrada..."
+              />
+            </Field>
+            <Field label="Último Usuário (obra)">
+              <input
+                className={inputClass}
+                value={lastUser}
+                onChange={(e) => setLastUser(e.target.value)}
+                placeholder="Nome do último usuário que utilizou (texto livre)"
+              />
+              <p className="mt-1 text-[11px] text-app-muted/70">
+                Campo de texto livre para relatórios — não vinculado a usuários do sistema.
+              </p>
+            </Field>
+            <div className="flex gap-3">
+              <button type="button" onClick={() => setShowDamaged(false)} className="flex-1 rounded-xl border-[0.5px] border-app-separator bg-app-elevated py-3 text-sm font-semibold text-app-muted hover:text-white">
+                Cancelar
+              </button>
+              <button type="button" onClick={handleMarkDamaged} className="flex-1 rounded-xl bg-status-orange py-3 text-sm font-bold text-white hover:opacity-90">
+                Marcar Avariada
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Assign to workshop dialog (ADM only) */}
+      <Dialog open={showWorkshop} onOpenChange={(o) => !o && setShowWorkshop(false)}>
+        <DialogContent className="max-w-md border-app-separator bg-app-card">
+          <DialogHeader>
+            <DialogTitle className="text-white">Enviar para Oficina</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-app-muted">
+            Ferramenta: <span className="font-semibold text-white">{tool.name}</span>
+          </p>
+          <div className="flex flex-col gap-3">
+            <Field label="Oficina *">
+              <select className={inputClass} value={selectedWorkshop} onChange={(e) => setSelectedWorkshop(e.target.value)}>
+                <option value="">Selecione...</option>
+                {db.workshops.map((w) => (
+                  <option key={w.id} value={w.id}>{w.name}</option>
+                ))}
+              </select>
+            </Field>
+            <p className="text-xs text-app-muted">
+              O status da ferramenta será alterado para “Em Manutenção” e ela será desvinculada da obra atual.
+            </p>
+            <div className="flex gap-3">
+              <button type="button" onClick={() => setShowWorkshop(false)} className="flex-1 rounded-xl border-[0.5px] border-app-separator bg-app-elevated py-3 text-sm font-semibold text-app-muted hover:text-white">
+                Cancelar
+              </button>
+              <button type="button" onClick={handleAssignToWorkshop} className="flex-1 rounded-xl bg-app-accent py-3 text-sm font-bold text-app-bg hover:opacity-90">
+                Enviar
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <AttachmentViewer attachment={viewerAttachment} onClose={() => setViewerAttachment(null)} />
       {validationOp && (
         <PhotoValidationDialog tool={tool} operation={validationOp} open={validationOp !== null} onClose={() => setValidationOp(null)} onConfirm={handleValidationConfirm} />

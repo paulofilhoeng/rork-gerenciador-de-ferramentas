@@ -131,6 +131,8 @@ const STATUS_MAP: Record<string, ToolStatus> = {
   "atrasada": "overdue",
   "desativada": "disabled",
   "desativado": "disabled",
+  "avariada": "damaged",
+  "avariado": "damaged",
 };
 
 const OWNERSHIP_MAP: Record<string, ToolOwnership> = {
@@ -212,7 +214,7 @@ export function validateRow(
   }
   const baseStatus = STATUS_MAP[statusStr.toLowerCase()];
   if (!baseStatus) {
-    return { rowNumber, status: "error", error: `Status inválido: "${statusStr}". Use: Disponível, Em Uso, Manutenção, Atrasada ou Desativada` };
+    return { rowNumber, status: "error", error: `Status inválido: "${statusStr}". Use: Disponível, Em Uso, Manutenção, Atrasada, Avariada ou Desativada` };
   }
 
   // Required: Frequência Auditoria
@@ -308,6 +310,9 @@ export function validateRow(
     rentalCompanyId: null,
     currentSiteId,
     currentUserId,
+    workshopId: null,
+    damageObs: "",
+    lastUser: "",
     auditFrequency,
     lastAuditDate,
     nextAuditDate,

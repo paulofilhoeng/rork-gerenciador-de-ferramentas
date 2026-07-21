@@ -17,10 +17,14 @@ import {
   UserPlus,
   Wrench,
   Wrench as WrenchIcon,
+  Wrench as WorkshopIcon,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { MovementType, StatusColor, ToolOwnership, ToolStatus } from "@/lib/types";
+import { TOOL_STATUS_COLOR } from "@/lib/types";
+
+export { TOOL_STATUS_COLOR };
 
 // MARK: - Color class maps (static strings for Tailwind JIT)
 
@@ -64,6 +68,7 @@ export const TOOL_STATUS_ICON: Record<ToolStatus, LucideIcon> = {
   maintenance: Wrench,
   overdue: AlertTriangle,
   disabled: Ban,
+  damaged: AlertTriangle,
 };
 
 export const OWNERSHIP_ICON: Record<ToolOwnership, LucideIcon> = {
@@ -89,6 +94,9 @@ export const MOVEMENT_ICON: Record<MovementType, LucideIcon> = {
   auditDamaged: AlertTriangle,
   maintenanceStarted: WrenchIcon,
   maintenanceReturned: CheckCircle2,
+  markedDamaged: AlertTriangle,
+  unmarkedDamaged: CheckCircle2,
+  workshopAssigned: WorkshopIcon,
 };
 
 // MARK: - Building blocks

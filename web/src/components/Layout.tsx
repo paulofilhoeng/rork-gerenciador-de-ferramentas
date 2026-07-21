@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { ClipboardList, Hammer, HelpCircle, LayoutGrid, LogOut, Settings, Shield, Users, ArrowLeftRight, Upload, Wrench } from "lucide-react";
+import { ClipboardList, Hammer, HelpCircle, LayoutGrid, LogOut, Settings, Shield, Users, ArrowLeftRight, Upload, Wrench, Building2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
 import { USER_ROLE_LABEL } from "@/lib/types";
@@ -10,10 +10,11 @@ const NAV_ITEMS = [
   { to: "/", label: "Painel", icon: LayoutGrid },
   { to: "/ferramentas", label: "Ferramentas", icon: Wrench },
   { to: "/locadoras", label: "Locadoras", icon: Shield },
+  { to: "/oficinas", label: "Oficinas", icon: Building2 },
   { to: "/obras", label: "Obras", icon: Hammer },
   { to: "/relatorios", label: "Relatórios", icon: ClipboardList },
-  { to: "/ajuda", label: "Ajuda", icon: HelpCircle },
   { to: "/ajustes", label: "Ajustes", icon: Settings },
+  { to: "/ajuda", label: "Ajuda", icon: HelpCircle },
 ];
 
 const ADMIN_ONLY_ITEMS = [
@@ -32,7 +33,8 @@ export function Layout({ children }: { children: ReactNode }) {
     navigate("/login");
   };
 
-  const items = isAdmin ? [...NAV_ITEMS, ...ADMIN_ONLY_ITEMS] : NAV_ITEMS;
+  // Admin items are inserted before Ajustes (which is already at index 6, before Ajuda).
+  const baseItems = isAdmin ? [...NAV_ITEMS.slice(0, 6), ...ADMIN_ONLY_ITEMS, ...NAV_ITEMS.slice(6)] : NAV_ITEMS;
 
   return (
     <div className="min-h-screen bg-app-bg">
@@ -48,7 +50,7 @@ export function Layout({ children }: { children: ReactNode }) {
           </div>
         </div>
         <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3">
-          {items.map(({ to, label, icon: Icon }) => (
+          {baseItems.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}
@@ -92,7 +94,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
       {/* Mobile bottom tabs */}
       <nav className="fixed inset-x-0 bottom-0 z-30 flex overflow-x-auto border-t-[0.5px] border-app-separator bg-[#17171A]/95 backdrop-blur-md md:hidden">
-        {items.map(({ to, label, icon: Icon }) => (
+        {baseItems.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}
