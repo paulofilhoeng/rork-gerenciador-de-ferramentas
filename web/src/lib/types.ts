@@ -478,3 +478,19 @@ export function newId(): string {
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
+
+/** Names of the default system movement types — used for permission checks. */
+export const PERMISSION_NAMES = {
+  EDIT: "Edição de ferramenta",
+  AUDIT: "Auditoria/conferência",
+  SEND_MAINTENANCE: "Envio para manutenção",
+  RETURN_MAINTENANCE: "Retorno de manutenção",
+} as const;
+
+/** Default system movement types seeded on first load. */
+export const DEFAULT_MOVEMENT_TYPES = [
+  { name: PERMISSION_NAMES.EDIT, description: "Editar dados de ferramentas alocadas na obra", sortOrder: 1 },
+  { name: PERMISSION_NAMES.AUDIT, description: "Realizar auditorias e registrar avarias", sortOrder: 2 },
+  { name: PERMISSION_NAMES.SEND_MAINTENANCE, description: "Enviar ferramentas para manutenção", sortOrder: 3 },
+  { name: PERMISSION_NAMES.RETURN_MAINTENANCE, description: "Registrar retorno de manutenção com nota fiscal", sortOrder: 4 },
+];

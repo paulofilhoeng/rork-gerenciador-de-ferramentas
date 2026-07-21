@@ -6,7 +6,7 @@ import { Field, inputClass } from "@/components/shared";
 import { useData } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import type { Tool, ToolAttachment } from "@/lib/types";
-import { newId } from "@/lib/types";
+import { newId, PERMISSION_NAMES } from "@/lib/types";
 import { fileToImageDataUrl } from "@/lib/media";
 
 export function MaintenanceReturnDialog({
@@ -36,7 +36,7 @@ export function MaintenanceReturnDialog({
 
   const handleReturn = async () => {
     if (!tool) return;
-    if (!isAdmin && profile && !hasPermission(profile.id, tool.currentSiteId, "Retorno de manutenção")) {
+    if (!isAdmin && profile && !hasPermission(profile.id, tool.currentSiteId, PERMISSION_NAMES.RETURN_MAINTENANCE)) {
       toast.error("Você não tem permissão para registrar retorno de manutenção nesta obra.");
       return;
     }

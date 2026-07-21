@@ -42,24 +42,7 @@ import { MaintenanceReturnDialog } from "@/components/MaintenanceReturnDialog";
 import { useData } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import type { ToolAttachment } from "@/lib/types";
-import {
-  AUDIT_FREQUENCY_LABEL,
-  MOVEMENT_COLOR,
-  MOVEMENT_LABEL,
-  OWNERSHIP_LABEL,
-  RENTAL_PERIOD_LABEL,
-  TOOL_STATUS_COLOR,
-  TOOL_STATUS_LABEL,
-  auditStatusLabel,
-  auditStatusColor,
-  auditDaysRemaining,
-  daysRemaining,
-  effectiveStatus,
-  isRentalTracked,
-  newId,
-  totalRentalCost,
-  dailyCostFromPeriod,
-} from "@/lib/types";
+import { AUDIT_FREQUENCY_LABEL, MOVEMENT_COLOR, MOVEMENT_LABEL, OWNERSHIP_LABEL, PERMISSION_NAMES, RENTAL_PERIOD_LABEL, TOOL_STATUS_COLOR, TOOL_STATUS_LABEL, auditStatusLabel, auditStatusColor, auditDaysRemaining, daysRemaining, effectiveStatus, isRentalTracked, newId, totalRentalCost, dailyCostFromPeriod, } from "@/lib/types";
 import { formatCurrency, formatDateTime, formatShortDate } from "@/lib/format";
 import { generateMovementsReport } from "@/lib/reports";
 import { cn } from "@/lib/utils";
@@ -122,6 +105,12 @@ export default function ToolDetail() {
 
   const handleValidationConfirm = (newAttachments: ToolAttachment[]) => {
     if (!validationOp) return;
+    // Standard users need "Edição de ferramenta" permission to register receipt/delivery on this site.
+    if (!isAdmin && profile && !hasPermission(profile.id, tool.currentSiteId, PERMISSION_NAMES.EDIT)) {
+      toast.error("Você não tem permissão para registrar recebimento/entrega nesta obra.");
+      setValidationOp(null);
+      return;
+    }
     const movementId = newId();
     const withMovement = newAttachments.map((a) => ({ ...a, movementId }));
     setValidationOp(null);
@@ -144,7 +133,7 @@ export default function ToolDetail() {
   };
 
   const handleStartMaintenance = () => {
-    if (!isAdmin && profile && !hasPermission(profile.id, tool.currentSiteId, "Envio para manutenção")) {
+    if (!isAdmin && profile && !hasPermission(profile.id, tool.currentSiteId, PERMISSION_NAMES.SEND_MAINTENANCE)) {
       toast.error("Você não tem permissão para enviar ferramentas para manutenção nesta obra.");
       return;
     }
@@ -172,6 +161,10 @@ export default function ToolDetail() {
   };
 
   const handleMarkDamaged = () => {
+    if (!isAdmin && profile && !hasPermission(profile.id, tool.currentSiteId, PERMISSION_NAMES.AUDIT)) {
+      toast.error("Você não tem permissão para registrar avarias nesta obra.");
+      return;
+    }
     if (!damageObs.trim()) {
       toast.error("Descreva a avaria");
       return;
@@ -184,6 +177,10 @@ export default function ToolDetail() {
   };
 
   const handleUnmarkDamaged = () => {
+    if (!isAdmin && profile && !hasPermission(profile.id, tool.currentSiteId, PERMISSION_NAMES.AUDIT)) {
+      toast.error("Você não tem permissão para remover avarias nesta obra.");
+      return;
+    }
     toast.success("Avaria removida — ferramenta disponível");
     void unmarkDamaged(tool.id);
   };
@@ -204,14 +201,16 @@ export default function ToolDetail() {
     <PageContainer
       title={tool.name}
       actions={
-        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2">
           <button type="button" onClick={() => navigate("/ferramentas")} className="flex items-center gap-1.5 rounded-[10px] px-3 py-2 text-sm font-semibold text-app-muted hover:text-white">
             <ArrowLeft size={15} /> Voltar
           </button>
-          <button type="button" onClick={() => setShowEdit(true)} className="rounded-[10px] bg-app-accent/15 px-4 py-2 text-sm font-semibold text-app-accent hover:bg-app-accent/25">
-            Editar
-          </button>
-        </div>
+          {(isAdmin || (profile && hasPermission(profile.id, tool.currentSiteId, PERMISSION_NAMES.EDIT))) && (
+            <button type="button" onClick={() => setShowEdit(true)} className="rounded-[10px] bg-app-accent/15 px-4 py-2 text-sm font-semibold text-app-accent hover:bg-app-accent/25">
+              Editar
+            </button>
+          )}
+          </div>
       }
     >
       <div className="flex flex-col gap-4 pb-6">
@@ -256,15 +255,15 @@ export default function ToolDetail() {
             <button
               type="button"
               onClick={() => setShowAudit(true)}
-              disabled={isInMaintenance || isDisabled || isDamaged}
+              disabled={isInMaintenance || isDisabled || isDamaged || (!isAdmin && !!profile && !hasPermission(profile.id, tool.currentSiteId, PERMISSION_NAMES.AUDIT))}
               className={cn(
                 "flex flex-1 items-center justify-center gap-2 rounded-[10px] py-2.5 text-sm font-semibold transition-colors",
-                isInMaintenance || isDisabled || isDamaged ? "cursor-not-allowed bg-app-elevated text-app-muted/50" : "bg-app-accent/15 text-app-accent hover:bg-app-accent/25",
+                isInMaintenance || isDisabled || isDamaged || (!isAdmin && !!profile && !hasPermission(profile.id, tool.currentSiteId, PERMISSION_NAMES.AUDIT)) ? "cursor-not-allowed bg-app-elevated text-app-muted/50" : "bg-app-accent/15 text-app-accent hover:bg-app-accent/25",
               )}
             >
               <ClipboardCheck size={15} /> Realizar Auditoria
             </button>
-            {!isDamaged && !hasActiveMaintenance && !isInMaintenance && !isDisabled && (
+            {!isDamaged && !hasActiveMaintenance && !isInMaintenance && !isDisabled && (isAdmin || (profile && hasPermission(profile.id, tool.currentSiteId, PERMISSION_NAMES.AUDIT))) && (
               <button
                 type="button"
                 onClick={() => setShowDamaged(true)}
@@ -273,7 +272,7 @@ export default function ToolDetail() {
                 <AlertTriangle size={15} /> Avariada
               </button>
             )}
-            {isDamaged && (
+            {isDamaged && (isAdmin || (profile && hasPermission(profile.id, tool.currentSiteId, PERMISSION_NAMES.AUDIT))) && (
               <button
                 type="button"
                 onClick={() => handleUnmarkDamaged()}
@@ -291,7 +290,7 @@ export default function ToolDetail() {
                 <Building2 size={15} /> Enviar para Oficina
               </button>
             )}
-            {hasActiveMaintenance && (
+            {hasActiveMaintenance && (isAdmin || (profile && hasPermission(profile.id, tool.currentSiteId, PERMISSION_NAMES.RETURN_MAINTENANCE))) && (
               <button
                 type="button"
                 onClick={() => setShowReturn(true)}
@@ -451,6 +450,7 @@ export default function ToolDetail() {
         )}
 
         {/* Photographic record */}
+        {(isAdmin || (profile && hasPermission(profile.id, tool.currentSiteId, PERMISSION_NAMES.EDIT))) && (
         <Card className="flex flex-col gap-3">
           <SectionHeader title="Registro Fotográfico" />
           <button type="button" onClick={() => setValidationOp("receipt")} className="flex items-center gap-3 rounded-[10px] bg-app-elevated p-3 text-left hover:bg-app-elevated/70">
@@ -468,6 +468,7 @@ export default function ToolDetail() {
             </div>
           </button>
         </Card>
+        )}
 
         {/* Attachments */}
         <Card className="flex flex-col gap-3">

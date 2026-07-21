@@ -23,7 +23,7 @@ import type {
   UserRole,
   Workshop,
 } from "./types";
-import { AUDIT_FREQUENCY_DAYS, computeNextAuditDate, newId } from "./types";
+import { AUDIT_FREQUENCY_DAYS, DEFAULT_MOVEMENT_TYPES, computeNextAuditDate, newId } from "./types";
 
 function mapTool(row: Record<string, unknown>): Tool {
   return {
@@ -319,6 +319,22 @@ function useDataHook() {
 
         if (cancelled) return;
 
+        // Seed default system movement types if none exist (first-time setup).
+        let movementTypesRows = movementTypesRes.data ?? [];
+        if (movementTypesRows.length === 0) {
+          await supabase.from("movement_types").insert(
+            DEFAULT_MOVEMENT_TYPES.map((d) => ({
+              name: d.name,
+              description: d.description,
+              is_active: true,
+              is_system: true,
+              sort_order: d.sortOrder,
+            })),
+          );
+          const { data: refetched } = await supabase.from("movement_types").select("*").order("sort_order", { ascending: true });
+          movementTypesRows = refetched ?? [];
+        }
+
         // Link movement attachment IDs
         const movements = (movementsRes.data ?? []).map((r) => {
           const m = mapMovement(r as Record<string, unknown>);
@@ -339,7 +355,7 @@ function useDataHook() {
           maintenance: (maintenanceRes.data ?? []).map((r) => mapMaintenance(r as Record<string, unknown>)),
           activityLogs: (activityRes.data ?? []).map((r) => mapActivityLog(r as Record<string, unknown>)),
           users: (profilesRes.data ?? []).map((r) => mapProfile(r as Record<string, unknown>)),
-          movementTypes: (movementTypesRes.data ?? []).map((r) => mapMovementType(r as Record<string, unknown>)),
+          movementTypes: movementTypesRows.map((r) => mapMovementType(r as Record<string, unknown>)),
           siteUserPermissions: (permissionsRes.data ?? []).map((r) => mapSiteUserPermission(r as Record<string, unknown>)),
           settings: settingsRes.data ? mapSettings(settingsRes.data as Record<string, unknown>) : { notificationsEnabled: false, alertDaysBefore: 3 },
         });

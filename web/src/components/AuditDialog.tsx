@@ -7,6 +7,7 @@ import { Field, inputClass } from "@/components/shared";
 import { useData } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import type { Tool } from "@/lib/types";
+import { PERMISSION_NAMES } from "@/lib/types";
 
 export function AuditDialog({
   tool,
@@ -24,7 +25,7 @@ export function AuditDialog({
 
   const handleConfirm = () => {
     if (!tool) return;
-    if (!isAdmin && profile && !hasPermission(profile.id, tool.currentSiteId, "Auditoria/conferência")) {
+    if (!isAdmin && profile && !hasPermission(profile.id, tool.currentSiteId, PERMISSION_NAMES.AUDIT)) {
       toast.error("Você não tem permissão para realizar auditorias nesta obra.");
       return;
     }
@@ -36,7 +37,7 @@ export function AuditDialog({
 
   const handleDamage = () => {
     if (!tool) return;
-    if (!isAdmin && profile && !hasPermission(profile.id, tool.currentSiteId, "Auditoria/conferência")) {
+    if (!isAdmin && profile && !hasPermission(profile.id, tool.currentSiteId, PERMISSION_NAMES.AUDIT)) {
       toast.error("Você não tem permissão para realizar auditorias nesta obra.");
       return;
     }

@@ -5,7 +5,7 @@ import { Field, inputClass } from "@/components/shared";
 import { useData } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import type { AuditFrequency, MovementType, RentalPeriod, Tool, ToolMovement, ToolOwnership, ToolStatus } from "@/lib/types";
-import { AUDIT_FREQUENCY_LABEL, OWNERSHIP_LABEL, RENTAL_PERIOD_LABEL, TOOL_STATUS_LABEL, computeNextAuditDate, newId } from "@/lib/types";
+import { AUDIT_FREQUENCY_LABEL, OWNERSHIP_LABEL, PERMISSION_NAMES, RENTAL_PERIOD_LABEL, TOOL_STATUS_LABEL, computeNextAuditDate, newId } from "@/lib/types";
 import { formatShortDate, fromDateInputValue, toDateInputValue } from "@/lib/format";
 
 interface Props {
@@ -15,8 +15,8 @@ interface Props {
 }
 
 export function ToolEditDialog({ tool, open, onClose }: Props) {
-  const { db, saveTool, addMovements } = useData();
-  const { isAdmin } = useAuth();
+  const { db, saveTool, addMovements, hasPermission } = useData();
+  const { isAdmin, profile } = useAuth();
   const isNew = tool === null;
 
   const [name, setName] = useState("");
@@ -61,6 +61,12 @@ export function ToolEditDialog({ tool, open, onClose }: Props) {
   const save = async () => {
     if (!name.trim()) {
       setShowError(true);
+      return;
+    }
+
+    // Standard users can only edit tools on sites where they have "Edição de ferramenta" permission.
+    if (!isAdmin && profile && tool && !hasPermission(profile.id, tool.currentSiteId, PERMISSION_NAMES.EDIT)) {
+      toast.error("Você não tem permissão para editar ferramentas nesta obra.");
       return;
     }
 
