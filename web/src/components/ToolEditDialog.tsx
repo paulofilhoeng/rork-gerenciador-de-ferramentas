@@ -136,10 +136,12 @@ export function ToolEditDialog({ tool, open, onClose }: Props) {
       }
     }
 
-    await saveTool(target);
-    if (movements.length > 0) await addMovements(movements);
-    toast.success(isNew ? "Ferramenta criada" : "Ferramenta atualizada");
+    // Close immediately — state is already optimistically updated by the store.
+    // Side-effects (movements, server persist) run in the background.
     onClose();
+    toast.success(isNew ? "Ferramenta criada" : "Ferramenta atualizada");
+    void saveTool(target);
+    if (movements.length > 0) void addMovements(movements);
   };
 
   return (

@@ -23,7 +23,6 @@ export function MaintenanceReturnDialog({
   const [repairCost, setRepairCost] = useState("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [invoiceDataUrl, setInvoiceDataUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleFile = async (file: File) => {
@@ -55,26 +54,20 @@ export function MaintenanceReturnDialog({
       return;
     }
 
-    setLoading(true);
-    try {
-      const attachment: ToolAttachment = {
-        id: newId(),
-        toolId: tool.id,
-        movementId: null,
-        type: "photo",
-        purpose: "invoice",
-        dataUrl: invoiceDataUrl,
-        caption: `NF: ${invoiceNumber}`,
-        createdAt: new Date().toISOString(),
-      };
-      await returnFromMaintenance(tool.id, cost, invoiceNumber.trim(), attachment);
-      toast.success("Retorno de manutenção registrado");
-      handleClose();
-    } catch {
-      toast.error("Falha ao registrar retorno");
-    } finally {
-      setLoading(false);
-    }
+    const attachment: ToolAttachment = {
+      id: newId(),
+      toolId: tool.id,
+      movementId: null,
+      type: "photo",
+      purpose: "invoice",
+      dataUrl: invoiceDataUrl,
+      caption: `NF: ${invoiceNumber}`,
+      createdAt: new Date().toISOString(),
+    };
+    // Close immediately — state is already optimistically updated.
+    handleClose();
+    toast.success("Retorno de manutenção registrado");
+    void returnFromMaintenance(tool.id, cost, invoiceNumber.trim(), attachment);
   };
 
   const handleClose = () => {
@@ -161,11 +154,10 @@ export function MaintenanceReturnDialog({
 
           <button
             type="button"
-            onClick={() => void handleReturn()}
-            disabled={loading}
-            className="flex items-center justify-center gap-2 rounded-xl bg-app-accent py-3 text-sm font-bold text-app-bg hover:opacity-90 disabled:opacity-50"
+            onClick={() => handleReturn()}
+            className="flex items-center justify-center gap-2 rounded-xl bg-app-accent py-3 text-sm font-bold text-app-bg hover:opacity-90"
           >
-            {loading ? <Loader2 size={16} className="animate-spin" /> : <Wrench size={15} />}
+            <Wrench size={15} />
             Concluir Retorno
           </button>
         </div>

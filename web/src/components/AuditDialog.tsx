@@ -21,27 +21,20 @@ export function AuditDialog({
   const { isAdmin, profile } = useAuth();
   const [mode, setMode] = useState<"confirm" | "damage">("confirm");
   const [description, setDescription] = useState("");
-  const [loading, setLoading] = useState(false);
 
-  const handleConfirm = async () => {
+  const handleConfirm = () => {
     if (!tool) return;
     if (!isAdmin && profile && !hasPermission(profile.id, tool.currentSiteId, "Auditoria/conferência")) {
       toast.error("Você não tem permissão para realizar auditorias nesta obra.");
       return;
     }
-    setLoading(true);
-    try {
-      await confirmAudit(tool.id);
-      toast.success("Auditoria confirmada");
-      onClose();
-    } catch {
-      toast.error("Falha ao confirmar auditoria");
-    } finally {
-      setLoading(false);
-    }
+    // Close immediately — state is already optimistically updated.
+    handleClose();
+    toast.success("Auditoria confirmada");
+    void confirmAudit(tool.id);
   };
 
-  const handleDamage = async () => {
+  const handleDamage = () => {
     if (!tool) return;
     if (!isAdmin && profile && !hasPermission(profile.id, tool.currentSiteId, "Auditoria/conferência")) {
       toast.error("Você não tem permissão para realizar auditorias nesta obra.");
@@ -51,16 +44,10 @@ export function AuditDialog({
       toast.error("Descreva a avaria/falha");
       return;
     }
-    setLoading(true);
-    try {
-      await reportDamage(tool.id, description.trim());
-      toast.success("Avaria registrada — status alterado para manutenção");
-      onClose();
-    } catch {
-      toast.error("Falha ao registrar avaria");
-    } finally {
-      setLoading(false);
-    }
+    // Close immediately — state is already optimistically updated.
+    handleClose();
+    toast.success("Avaria registrada — status alterado para manutenção");
+    void reportDamage(tool.id, description.trim());
   };
 
   const handleClose = () => {
@@ -112,11 +99,9 @@ export function AuditDialog({
             </p>
             <button
               type="button"
-              onClick={() => void handleConfirm()}
-              disabled={loading}
-              className="flex items-center justify-center gap-2 rounded-xl bg-status-green py-3 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50"
+              onClick={() => handleConfirm()}
+              className="flex items-center justify-center gap-2 rounded-xl bg-status-green py-3 text-sm font-bold text-white hover:opacity-90"
             >
-              {loading && <Loader2 size={16} className="animate-spin" />}
               Confirmar Conferência
             </button>
           </div>
@@ -136,11 +121,9 @@ export function AuditDialog({
             </p>
             <button
               type="button"
-              onClick={() => void handleDamage()}
-              disabled={loading}
-              className="flex items-center justify-center gap-2 rounded-xl bg-status-red py-3 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50"
+              onClick={() => handleDamage()}
+              className="flex items-center justify-center gap-2 rounded-xl bg-status-red py-3 text-sm font-bold text-white hover:opacity-90"
             >
-              {loading && <Loader2 size={16} className="animate-spin" />}
               Registrar Avaria
             </button>
           </div>

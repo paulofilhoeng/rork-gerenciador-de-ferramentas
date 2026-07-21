@@ -39,12 +39,14 @@ function MovementTypeEditDialog({
     setDescription(mt?.description ?? "");
   }, [open, mt]);
 
-  const save = async () => {
+  const save = () => {
     if (!name.trim()) {
       toast.error("Informe o nome do tipo de movimentação");
       return;
     }
-    await saveMovementType({
+    onClose();
+    toast.success(isNew ? "Tipo criado" : "Tipo atualizado");
+    void saveMovementType({
       id: mt?.id ?? newId(),
       name: name.trim(),
       description: description.trim(),
@@ -54,8 +56,6 @@ function MovementTypeEditDialog({
       createdAt: mt?.createdAt ?? new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
-    toast.success(isNew ? "Tipo criado" : "Tipo atualizado");
-    onClose();
   };
 
   return (
@@ -93,7 +93,7 @@ function MovementTypeEditDialog({
             </button>
             <button
               type="button"
-              onClick={() => void save()}
+              onClick={() => save()}
               className="flex-1 rounded-xl bg-app-accent py-3 text-sm font-bold text-app-bg hover:opacity-90"
             >
               Salvar

@@ -72,7 +72,7 @@ function UserEditDialog({
     setForm((f) => ({ ...f, [key]: value }));
   };
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!form.name.trim()) {
       toast.error("Nome é obrigatório");
       return;
@@ -82,8 +82,9 @@ function UserEditDialog({
     if (isNew) {
       target.id = newId();
       target.createdAt = new Date().toISOString();
-      await saveUser(target);
+      onClose();
       toast.success("Usuário cadastrado");
+      void saveUser(target);
     } else {
       // Role change safeguards
       if (form.role === "user" && user?.role === "admin") {
@@ -93,29 +94,29 @@ function UserEditDialog({
           return;
         }
       }
-      await saveUser(target, user?.role);
-      if (isSelf) await refreshProfile();
+      onClose();
       toast.success("Usuário atualizado");
+      void saveUser(target, user?.role);
+      if (isSelf) void refreshProfile();
     }
-    onClose();
   };
 
-  const handleGrant = async () => {
+  const handleGrant = () => {
     if (!form.id || !loginEmail.trim() || !loginPassword) {
       toast.error("Preencha e-mail e senha");
       return;
     }
-    await grantLoginAccess(form.id, loginEmail.trim(), loginPassword, form.role);
     setGrantOpen(false);
+    void grantLoginAccess(form.id, loginEmail.trim(), loginPassword, form.role);
   };
 
-  const handleRevoke = async () => {
+  const handleRevoke = () => {
     if (!form.id) return;
-    await revokeLoginAccess(form.id);
     toast.success("Acesso revogado");
+    void revokeLoginAccess(form.id);
   };
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     if (!form.id) return;
     if (form.id === currentUser?.id) {
       toast.error("Você não pode excluir a própria conta");
@@ -127,9 +128,10 @@ function UserEditDialog({
       setDeleteOpen(false);
       return;
     }
-    await deleteUser(form.id);
     setDeleteOpen(false);
     onClose();
+    toast.success("Usuário excluído");
+    void deleteUser(form.id);
   };
 
   return (
@@ -262,7 +264,7 @@ function UserEditDialog({
               <button type="button" onClick={onClose} className="flex-1 rounded-xl border-[0.5px] border-app-separator bg-app-elevated py-3 text-sm font-semibold text-app-muted hover:text-white">
                 Cancelar
               </button>
-              <button type="button" onClick={() => void handleSave()} className="flex-1 rounded-xl bg-app-accent py-3 text-sm font-bold text-app-bg hover:opacity-90">
+              <button type="button" onClick={() => handleSave()} className="flex-1 rounded-xl bg-app-accent py-3 text-sm font-bold text-app-bg hover:opacity-90">
                 Salvar
               </button>
             </div>

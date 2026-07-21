@@ -77,12 +77,14 @@ function SiteEditDialog({ site, open, onClose }: { site: ConstructionSite | null
     setShowError(false);
   }, [open, site]);
 
-  const save = async () => {
+  const save = () => {
     if (!name.trim()) {
       setShowError(true);
       return;
     }
-    await saveSite({
+    onClose();
+    toast.success(isNew ? "Obra criada" : "Obra atualizada");
+    void saveSite({
       id: site?.id ?? newId(),
       name: name.trim(),
       address,
@@ -93,8 +95,6 @@ function SiteEditDialog({ site, open, onClose }: { site: ConstructionSite | null
       notes,
       createdAt: site?.createdAt ?? new Date().toISOString(),
     });
-    toast.success(isNew ? "Obra criada" : "Obra atualizada");
-    onClose();
   };
 
   return (
@@ -136,7 +136,7 @@ function SiteEditDialog({ site, open, onClose }: { site: ConstructionSite | null
             <button type="button" onClick={onClose} className="flex-1 rounded-xl border-[0.5px] border-app-separator bg-app-elevated py-3 text-sm font-semibold text-app-muted hover:text-white">
               Cancelar
             </button>
-            <button type="button" onClick={() => void save()} className="flex-1 rounded-xl bg-app-accent py-3 text-sm font-bold text-app-bg hover:opacity-90">
+            <button type="button" onClick={() => save()} className="flex-1 rounded-xl bg-app-accent py-3 text-sm font-bold text-app-bg hover:opacity-90">
               Salvar
             </button>
           </div>

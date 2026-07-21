@@ -22,7 +22,7 @@ export default function Settings() {
 
   const toggleNotifications = async (enabled: boolean) => {
     if (!enabled) {
-      await updateSettings({ notificationsEnabled: false });
+      void updateSettings({ notificationsEnabled: false });
       return;
     }
     if (!("Notification" in window)) {
@@ -31,7 +31,7 @@ export default function Settings() {
     }
     const permission = await Notification.requestPermission();
     if (permission === "granted") {
-      await updateSettings({ notificationsEnabled: true });
+      void updateSettings({ notificationsEnabled: true });
       toast.success("Alertas de vencimento ativados");
     } else {
       toast.error("Permissão de notificações negada.");

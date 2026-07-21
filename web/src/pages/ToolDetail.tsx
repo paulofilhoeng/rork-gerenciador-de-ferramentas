@@ -110,12 +110,14 @@ export default function ToolDetail() {
   const isDisabled = tool.baseStatus === "disabled";
   const hasActiveMaintenance = maintenanceRecords.some((m) => m.status === "active");
 
-  const handleValidationConfirm = async (newAttachments: ToolAttachment[]) => {
+  const handleValidationConfirm = (newAttachments: ToolAttachment[]) => {
     if (!validationOp) return;
     const movementId = newId();
     const withMovement = newAttachments.map((a) => ({ ...a, movementId }));
-    await addAttachments(withMovement);
-    await addMovements([
+    setValidationOp(null);
+    toast.success(`${OPERATION_LABEL[validationOp]} registrado com ${withMovement.length} fotos`);
+    void addAttachments(withMovement);
+    void addMovements([
       {
         id: movementId,
         toolId: tool.id,
@@ -129,21 +131,21 @@ export default function ToolDetail() {
         userName: "",
       },
     ]);
-    toast.success(`${OPERATION_LABEL[validationOp]} registrado com ${withMovement.length} fotos`);
   };
 
-  const handleStartMaintenance = async () => {
+  const handleStartMaintenance = () => {
     if (!isAdmin && profile && !hasPermission(profile.id, tool.currentSiteId, "Envio para manutenção")) {
       toast.error("Você não tem permissão para enviar ferramentas para manutenção nesta obra.");
       return;
     }
-    await startMaintenance(tool.id);
     toast.success("Ferramenta enviada para manutenção");
+    void startMaintenance(tool.id);
   };
 
-  const handleReactivate = async () => {
-    await saveTool({ ...tool, baseStatus: "available", statusUpdatedAt: new Date().toISOString() });
-    await addMovements([
+  const handleReactivate = () => {
+    toast.success("Ferramenta reativada");
+    void saveTool({ ...tool, baseStatus: "available", statusUpdatedAt: new Date().toISOString() });
+    void addMovements([
       {
         id: newId(),
         toolId: tool.id,
@@ -157,7 +159,6 @@ export default function ToolDetail() {
         userName: "",
       },
     ]);
-    toast.success("Ferramenta reativada");
   };
 
   return (
