@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { Calendar, Clock, Hammer, User, Wrench } from "lucide-react";
 import { PageContainer } from "@/components/Layout";
 import {
@@ -87,23 +87,40 @@ function ToolRow({ tool }: { tool: Tool }) {
   );
 }
 
+const OWNERSHIP_VALUES: ToolOwnership[] = ["own", "rented", "client"];
+const STATUS_VALUES: ToolStatus[] = ["inUse", "available", "overdue", "maintenance", "damaged", "disabled"];
+
 export default function Tools() {
   const { db } = useData();
-  const location = useLocation();
-  const [search, setSearch] = useState("");
-  const [siteSearch, setSiteSearch] = useState("");
-  const [filterOwnership, setFilterOwnership] = useState<ToolOwnership | null>(null);
-  const [filterStatus, setFilterStatus] = useState<ToolStatus | null>(null);
-  const [filterResponsible, setFilterResponsible] = useState<string | null>(null);
-  const [showDisabled, setShowDisabled] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [showAdd, setShowAdd] = useState(false);
 
-  // Apply filters passed via router state (from Dashboard "Ver minhas ferramentas" / status matrix).
-  useEffect(() => {
-    const state = location.state as { filterStatus?: ToolStatus; filterResponsible?: string } | null;
-    if (state?.filterStatus) setFilterStatus(state.filterStatus);
-    if (state?.filterResponsible !== undefined) setFilterResponsible(state.filterResponsible ?? null);
-  }, [location.state]);
+  // Read filters from URL search params — survives navigation and F5.
+  const search = searchParams.get("q") ?? "";
+  const siteSearch = searchParams.get("obra") ?? "";
+  const tipoParam = searchParams.get("tipo");
+  const filterOwnership: ToolOwnership | null =
+    tipoParam && OWNERSHIP_VALUES.includes(tipoParam as ToolOwnership) ? (tipoParam as ToolOwnership) : null;
+  const statusParam = searchParams.get("status");
+  const filterStatus: ToolStatus | null =
+    statusParam && STATUS_VALUES.includes(statusParam as ToolStatus) ? (statusParam as ToolStatus) : null;
+  const filterResponsible = searchParams.get("resp");
+  const showDisabled = searchParams.get("desc") === "1";
+
+  /** Merge param updates into the current URL, preserving untouched params. */
+  const updateParams = (updates: Record<string, string | null>, replace = false) => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        for (const [key, value] of Object.entries(updates)) {
+          if (value === null || value === "") next.delete(key);
+          else next.set(key, value);
+        }
+        return next;
+      },
+      replace ? { replace: true } : undefined,
+    );
+  };
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -111,14 +128,18 @@ export default function Tools() {
     return [...db.tools]
       .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))
       .filter((tool) => {
-        // Disabled tools are hidden from default list; shown only via explicit filter or search
+        // Disabled tools are hidden from default list; shown only via explicit filter or search.
         const isVisibleDisabled = tool.baseStatus === "disabled" && !showDisabled && filterStatus !== "disabled" && q === "";
         if (isVisibleDisabled) return false;
+        const rentalCompanyName = tool.rentalCompanyId
+          ? db.companies.find((c) => c.id === tool.rentalCompanyId)?.name ?? ""
+          : "";
         const matchesSearch =
           q === "" ||
           tool.name.toLowerCase().includes(q) ||
           tool.brand.toLowerCase().includes(q) ||
-          tool.serialNumber.toLowerCase().includes(q);
+          tool.serialNumber.toLowerCase().includes(q) ||
+          rentalCompanyName.toLowerCase().includes(q);
         const matchesOwnership = filterOwnership === null || tool.ownership === filterOwnership;
         const matchesStatus = filterStatus === null || effectiveStatus(tool) === filterStatus;
         const matchesResponsible = filterResponsible === null || tool.currentUserId === filterResponsible;
@@ -126,20 +147,18 @@ export default function Tools() {
         const matchesSite = siteQ === "" || siteName.toLowerCase().includes(siteQ);
         return matchesSearch && matchesOwnership && matchesStatus && matchesResponsible && matchesSite;
       });
-  }, [db.tools, db.sites, search, siteSearch, filterOwnership, filterStatus, filterResponsible, showDisabled]);
-
-  const clearResponsibleFilter = () => setFilterResponsible(null);
+  }, [db.tools, db.sites, db.companies, search, siteSearch, filterOwnership, filterStatus, filterResponsible, showDisabled]);
 
   return (
     <PageContainer title="Ferramentas">
       <div className="flex flex-col gap-4 pb-6">
-        <SearchInput value={search} onChange={setSearch} placeholder="Nome, marca ou série" />
-        <SearchInput value={siteSearch} onChange={setSiteSearch} placeholder="Filtrar por obra (digite o nome)" />
+        <SearchInput value={search} onChange={(v) => updateParams({ q: v }, true)} placeholder="Nome, marca, série ou locadora" />
+        <SearchInput value={siteSearch} onChange={(v) => updateParams({ obra: v }, true)} placeholder="Filtrar por obra (digite o nome)" />
 
         {filterResponsible && (
           <button
             type="button"
-            onClick={clearResponsibleFilter}
+            onClick={() => updateParams({ resp: null })}
             className="flex items-center justify-between rounded-lg border border-app-accent/30 bg-app-accent/10 px-3 py-2 text-xs font-semibold text-app-accent"
           >
             <span>Filtrado: somente minhas ferramentas</span>
@@ -150,7 +169,7 @@ export default function Tools() {
         {siteSearch && (
           <button
             type="button"
-            onClick={() => setSiteSearch("")}
+            onClick={() => updateParams({ obra: null })}
             className="flex items-center justify-between rounded-lg border border-app-orange/30 bg-app-orange/10 px-3 py-2 text-xs font-semibold text-app-orange"
           >
             <span>Filtrado por obra: {siteSearch}</span>
@@ -162,57 +181,56 @@ export default function Tools() {
           <FilterChip
             label="Todas"
             isActive={filterOwnership === null && filterStatus === null}
-            onClick={() => {
-              setFilterOwnership(null);
-              setFilterStatus(null);
-            }}
+            onClick={() => updateParams({ tipo: null, status: null })}
           />
           <FilterChip
             label={OWNERSHIP_LABEL.own + "s"}
             isActive={filterOwnership === "own"}
-            onClick={() => setFilterOwnership(filterOwnership === "own" ? null : "own")}
+            onClick={() => updateParams({ tipo: filterOwnership === "own" ? null : "own" })}
           />
           <FilterChip
             label={OWNERSHIP_LABEL.rented + "s"}
             isActive={filterOwnership === "rented"}
-            onClick={() => setFilterOwnership(filterOwnership === "rented" ? null : "rented")}
+            onClick={() => updateParams({ tipo: filterOwnership === "rented" ? null : "rented" })}
           />
           <FilterChip
             label={OWNERSHIP_LABEL.client + "s"}
             isActive={filterOwnership === "client"}
-            onClick={() => setFilterOwnership(filterOwnership === "client" ? null : "client")}
+            onClick={() => updateParams({ tipo: filterOwnership === "client" ? null : "client" })}
           />
           <FilterChip
             label="Em Uso"
             isActive={filterStatus === "inUse"}
-            onClick={() => setFilterStatus(filterStatus === "inUse" ? null : "inUse")}
+            onClick={() => updateParams({ status: filterStatus === "inUse" ? null : "inUse" })}
           />
           <FilterChip
             label="Disponíveis"
             isActive={filterStatus === "available"}
-            onClick={() => setFilterStatus(filterStatus === "available" ? null : "available")}
+            onClick={() => updateParams({ status: filterStatus === "available" ? null : "available" })}
           />
           <FilterChip
             label="Atrasadas"
             isActive={filterStatus === "overdue"}
-            onClick={() => setFilterStatus(filterStatus === "overdue" ? null : "overdue")}
+            onClick={() => updateParams({ status: filterStatus === "overdue" ? null : "overdue" })}
           />
           <FilterChip
             label="Manutenção"
             isActive={filterStatus === "maintenance"}
-            onClick={() => setFilterStatus(filterStatus === "maintenance" ? null : "maintenance")}
+            onClick={() => updateParams({ status: filterStatus === "maintenance" ? null : "maintenance" })}
           />
           <FilterChip
             label="Avariadas"
             isActive={filterStatus === "damaged"}
-            onClick={() => setFilterStatus(filterStatus === "damaged" ? null : "damaged")}
+            onClick={() => updateParams({ status: filterStatus === "damaged" ? null : "damaged" })}
           />
           <FilterChip
             label="Desativadas"
             isActive={filterStatus === "disabled" || showDisabled}
             onClick={() => {
-              setShowDisabled((v) => !v);
-              setFilterStatus(filterStatus === "disabled" ? null : "disabled");
+              updateParams({
+                desc: showDisabled ? null : "1",
+                status: filterStatus === "disabled" ? null : "disabled",
+              });
             }}
           />
         </div>

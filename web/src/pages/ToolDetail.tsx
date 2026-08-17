@@ -202,7 +202,7 @@ export default function ToolDetail() {
       title={tool.name}
       actions={
           <div className="flex items-center gap-2">
-          <button type="button" onClick={() => navigate("/ferramentas")} className="flex items-center gap-1.5 rounded-[10px] px-3 py-2 text-sm font-semibold text-app-muted hover:text-white">
+          <button type="button" onClick={() => navigate(-1)} className="flex items-center gap-1.5 rounded-[10px] px-3 py-2 text-sm font-semibold text-app-muted hover:text-white">
             <ArrowLeft size={15} /> Voltar
           </button>
           {(isAdmin || (profile && hasPermission(profile.id, tool.currentSiteId, PERMISSION_NAMES.EDIT))) && (

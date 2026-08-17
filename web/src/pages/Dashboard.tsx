@@ -83,8 +83,7 @@ function StatusMatrixRow({ status, count, tools, siteFilterIds }: { status: Tool
   const visibleCount = siteFilterIds === null ? count : visibleTools.length;
   return (
     <Link
-      to={`/ferramentas`}
-      state={{ filterStatus: status }}
+      to={`/ferramentas?status=${status}`}
       className="flex items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-white/5"
     >
       <IconTile icon={Icon} color={color} size={32} iconSize={15} />
@@ -281,8 +280,7 @@ export default function Dashboard() {
 
               {myPanel.myTools.length > 0 && (
                 <Link
-                  to="/ferramentas"
-                  state={{ filterResponsible: profile?.id }}
+                  to={`/ferramentas?resp=${profile?.id}`}
                   className="text-center text-xs font-semibold text-app-accent hover:opacity-80"
                 >
                   Ver minhas ferramentas →
