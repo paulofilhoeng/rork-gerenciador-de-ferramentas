@@ -16,6 +16,7 @@ export type ActivityAction =
   | "edit"
   | "delete"
   | "move"
+  | "siteChanged"
   | "audit"
   | "maintenance"
   | "roleChange"
@@ -184,6 +185,7 @@ export const ACTIVITY_ACTION_LABEL: Record<ActivityAction, string> = {
   edit: "Edição",
   delete: "Exclusão",
   move: "Movimentação",
+  siteChanged: "Obra Alterada",
   audit: "Auditoria",
   maintenance: "Manutenção",
   roleChange: "Alteração de Nível",
@@ -197,6 +199,7 @@ export const ACTIVITY_ACTION_COLOR: Record<ActivityAction, StatusColor> = {
   edit: "blue",
   delete: "red",
   move: "blue",
+  siteChanged: "blue",
   audit: "orange",
   maintenance: "gray",
   roleChange: "orange",

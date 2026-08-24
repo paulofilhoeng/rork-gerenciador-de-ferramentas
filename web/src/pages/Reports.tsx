@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ClipboardList, Download, Filter, Activity, Wrench } from "lucide-react";
+import { Building2, ClipboardList, Download, Filter, Activity, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { PageContainer } from "@/components/Layout";
 import { Card, IconTile, SectionHeader, Separator, FilterChip, inputClass } from "@/components/shared";
@@ -256,15 +256,20 @@ export default function Reports() {
                 ) : (
                   actResults.slice(0, 100).map((log, i) => {
                     const color = ACTIVITY_ACTION_COLOR[log.action];
+                    const oldSite = (log.oldValues as { site?: string } | null)?.site;
+                    const newSite = (log.newValues as { site?: string } | null)?.site;
                     return (
                       <div key={log.id}>
                         <div className="flex items-start gap-3 py-2">
-                          <IconTile icon={Filter} color={color} size={30} iconSize={13} />
+                          <IconTile icon={log.action === "siteChanged" ? Building2 : Filter} color={color} size={30} iconSize={13} />
                           <div className="min-w-0 flex-1">
                             <p className={`text-sm font-semibold ${COLOR_TEXT[color]}`}>{ACTIVITY_ACTION_LABEL[log.action]}</p>
                             <p className="truncate text-xs text-app-muted">
                               {log.entityName} ({log.entityType})
                             </p>
+                            {log.action === "siteChanged" && oldSite && newSite && (
+                              <p className="truncate text-xs text-app-muted">{oldSite} → {newSite}</p>
+                            )}
                             <p className="text-[11px] text-app-muted/60">
                               {log.userName} · {formatDateTime(log.createdAt)}
                             </p>

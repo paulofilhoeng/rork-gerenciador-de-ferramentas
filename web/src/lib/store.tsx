@@ -569,6 +569,12 @@ function useDataHook() {
       const existing = db.tools.find((t) => t.id === tool.id);
       const isNew = !existing;
       const statusChanged = !isNew && existing?.baseStatus !== tool.baseStatus;
+      // Own tools moving between sites get their own activity entry so reports
+      // can filter them apart from generic edits.
+      const siteMoved =
+        !isNew && !!existing && tool.ownership === "own" && existing.currentSiteId !== tool.currentSiteId;
+      const siteLabel = (siteId: string | null): string =>
+        siteId ? db.sites.find((s) => s.id === siteId)?.name ?? "—" : "Sem obra";
       const nowIso = new Date().toISOString();
 
       const optimisticTool: Tool = {
@@ -635,6 +641,17 @@ function useDataHook() {
           undefined,
           { name: tool.name, ownership: tool.ownership },
         ),
+        siteMoved && existing
+          ? logActivity(
+              "siteChanged",
+              "tool",
+              tool.id,
+              tool.name,
+              { site: siteLabel(existing.currentSiteId) },
+              { site: siteLabel(tool.currentSiteId) },
+              tool.currentSiteId,
+            )
+          : Promise.resolve(),
       ]);
 
       if (upsertRes.error) {
@@ -647,7 +664,7 @@ function useDataHook() {
         console.error(upsertRes.error);
       }
     },
-    [db.tools, insertMovements, logActivity, user, profile],
+    [db.tools, db.sites, insertMovements, logActivity, user, profile],
   );
 
   const deleteTool = useCallback(
