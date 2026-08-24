@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowDownCircle, ArrowLeft, ArrowUpCircle, AlertTriangle, Building2, CheckCircle2, ClipboardCheck, Clock, Download, Hammer, Power, Trash2, User, Wrench } from "lucide-react";
+import { ArrowDownCircle, ArrowLeft, ArrowUpCircle, AlertTriangle, Building2, CheckCircle2, ClipboardCheck, Clock, Download, Hammer, Power, Trash2, Undo2, User, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -39,6 +39,7 @@ import {
 import { ToolEditDialog } from "@/components/ToolEditDialog";
 import { AuditDialog } from "@/components/AuditDialog";
 import { MaintenanceReturnDialog } from "@/components/MaintenanceReturnDialog";
+import { RentalReturnDialog } from "@/components/RentalReturnDialog";
 import { useData } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import type { ToolAttachment } from "@/lib/types";
@@ -59,6 +60,7 @@ export default function ToolDetail() {
   const [validationOp, setValidationOp] = useState<ValidationOperation | null>(null);
   const [showAudit, setShowAudit] = useState(false);
   const [showReturn, setShowReturn] = useState(false);
+  const [showRentalReturn, setShowRentalReturn] = useState(false);
   const [showDamaged, setShowDamaged] = useState(false);
   const [showWorkshop, setShowWorkshop] = useState(false);
   const [damageObs, setDamageObs] = useState("");
@@ -80,6 +82,10 @@ export default function ToolDetail() {
     () => db.maintenance.filter((m) => m.toolId === id).sort((a, b) => (b.startDate ?? "").localeCompare(a.startDate ?? "")),
     [db.maintenance, id],
   );
+  const rentalReturns = useMemo(
+    () => db.rentalReturns.filter((r) => r.toolId === id).sort((a, b) => b.returnDate.localeCompare(a.returnDate)),
+    [db.rentalReturns, id],
+  );
 
   if (!tool) {
     return (
@@ -99,6 +105,7 @@ export default function ToolDetail() {
   const user = tool.currentUserId ? db.users.find((u) => u.id === tool.currentUserId) : null;
   const isInMaintenance = tool.baseStatus === "maintenance";
   const isDisabled = tool.baseStatus === "disabled";
+  const isReturned = tool.baseStatus === "returned";
   const isDamaged = tool.baseStatus === "damaged";
   const hasActiveMaintenance = maintenanceRecords.some((m) => m.status === "active");
   const workshop = tool.workshopId ? db.workshops.find((w) => w.id === tool.workshopId) : null;
@@ -243,22 +250,22 @@ export default function ToolDetail() {
           {tool.lastAuditDate && (
             <DetailRow label="Última auditoria" value={formatDateTime(tool.lastAuditDate)} />
           )}
-          {tool.nextAuditDate && !isDisabled && (
+          {tool.nextAuditDate && !isDisabled && !isReturned && (
             <DetailRow label="Próxima auditoria" value={formatShortDate(tool.nextAuditDate)} />
           )}
-          {isDisabled && (
+          {(isDisabled || isReturned) && (
             <p className="rounded-lg bg-app-elevated py-2 text-center text-xs font-medium text-app-muted">
-              Ferramenta desativada — auditorias suspensas
+              {isDisabled ? "Ferramenta desativada — auditorias suspensas" : "Ferramenta devolvida à locadora — auditorias suspensas"}
             </p>
           )}
           <div className="flex flex-wrap gap-2 pt-1">
             <button
               type="button"
               onClick={() => setShowAudit(true)}
-              disabled={isInMaintenance || isDisabled || isDamaged || (!isAdmin && !!profile && !hasPermission(profile.id, tool.currentSiteId, PERMISSION_NAMES.AUDIT))}
+              disabled={isInMaintenance || isDisabled || isReturned || isDamaged || (!isAdmin && !!profile && !hasPermission(profile.id, tool.currentSiteId, PERMISSION_NAMES.AUDIT))}
               className={cn(
                 "flex flex-1 items-center justify-center gap-2 rounded-[10px] py-2.5 text-sm font-semibold transition-colors",
-                isInMaintenance || isDisabled || isDamaged || (!isAdmin && !!profile && !hasPermission(profile.id, tool.currentSiteId, PERMISSION_NAMES.AUDIT)) ? "cursor-not-allowed bg-app-elevated text-app-muted/50" : "bg-app-accent/15 text-app-accent hover:bg-app-accent/25",
+                isInMaintenance || isDisabled || isReturned || isDamaged || (!isAdmin && !!profile && !hasPermission(profile.id, tool.currentSiteId, PERMISSION_NAMES.AUDIT)) ? "cursor-not-allowed bg-app-elevated text-app-muted/50" : "bg-app-accent/15 text-app-accent hover:bg-app-accent/25",
               )}
             >
               <ClipboardCheck size={15} /> Realizar Auditoria
@@ -297,6 +304,15 @@ export default function ToolDetail() {
                 className="flex items-center justify-center gap-2 rounded-[10px] bg-status-green/15 px-3 py-2.5 text-sm font-semibold text-status-green hover:bg-status-green/25"
               >
                 <ArrowDownCircle size={15} /> Retorno
+              </button>
+            )}
+            {tool.ownership === "rented" && !isReturned && !isDisabled && !isInMaintenance && (isAdmin || (profile && hasPermission(profile.id, tool.currentSiteId, PERMISSION_NAMES.RETURN_RENTAL))) && (
+              <button
+                type="button"
+                onClick={() => setShowRentalReturn(true)}
+                className="flex items-center justify-center gap-2 rounded-[10px] bg-status-gray/15 px-3 py-2.5 text-sm font-semibold text-status-gray hover:bg-status-gray/25"
+              >
+                <Undo2 size={15} /> Registrar Devolução
               </button>
             )}
           </div>
@@ -423,6 +439,30 @@ export default function ToolDetail() {
           </Card>
         )}
 
+        {/* Rental return history */}
+        {rentalReturns.length > 0 && (
+          <Card className="flex flex-col gap-2">
+            <SectionHeader title="Histórico de Devoluções" count={rentalReturns.length} />
+            {rentalReturns.map((r, i) => (
+              <div key={r.id}>
+                <div className="flex items-start gap-3 py-1.5">
+                  <IconTile icon={Undo2} color={r.conditionStatus === "confirmed" ? "green" : "red"} size={30} iconSize={13} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-white">
+                      {r.conditionStatus === "confirmed" ? "Devolvida em Boas Condições" : "Devolvida com Avaria"}
+                    </p>
+                    {r.conditionNotes && <p className="text-xs text-status-red">{r.conditionNotes}</p>}
+                    {r.accessoriesReturned && <p className="text-xs text-app-muted">Acessórios: {r.accessoriesReturned}</p>}
+                    <p className="text-xs text-app-muted">Recebido por {r.recipientName}{r.recipientPhone ? ` · ${r.recipientPhone}` : ""}</p>
+                    <p className="text-[11px] text-app-muted/60">{r.userName} · {formatDateTime(r.returnDate)}</p>
+                  </div>
+                </div>
+                {i < rentalReturns.length - 1 && <Separator />}
+              </div>
+            ))}
+          </Card>
+        )}
+
         {/* Maintenance history */}
         {maintenanceRecords.length > 0 && (
           <Card className="flex flex-col gap-2">
@@ -450,7 +490,7 @@ export default function ToolDetail() {
         )}
 
         {/* Photographic record */}
-        {(isAdmin || (profile && hasPermission(profile.id, tool.currentSiteId, PERMISSION_NAMES.EDIT))) && (
+        {!isReturned && (isAdmin || (profile && hasPermission(profile.id, tool.currentSiteId, PERMISSION_NAMES.EDIT))) && (
         <Card className="flex flex-col gap-3">
           <SectionHeader title="Registro Fotográfico" />
           <button type="button" onClick={() => setValidationOp("receipt")} className="flex items-center gap-3 rounded-[10px] bg-app-elevated p-3 text-left hover:bg-app-elevated/70">
@@ -635,6 +675,7 @@ export default function ToolDetail() {
       )}
       <AuditDialog tool={tool} open={showAudit} onClose={() => setShowAudit(false)} />
       <MaintenanceReturnDialog tool={tool} open={showReturn} onClose={() => setShowReturn(false)} />
+      <RentalReturnDialog tool={tool} open={showRentalReturn} onClose={() => setShowRentalReturn(false)} />
       <AlertDialog open={showDelete} onOpenChange={setShowDelete}>
         <AlertDialogContent className="border-app-separator bg-app-card">
           <AlertDialogHeader>

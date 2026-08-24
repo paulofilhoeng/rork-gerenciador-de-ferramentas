@@ -12,6 +12,7 @@ import {
   PlusCircle,
   RefreshCw,
   StickyNote,
+  Undo2,
   User,
   UserMinus,
   UserPlus,
@@ -69,6 +70,7 @@ export const TOOL_STATUS_ICON: Record<ToolStatus, LucideIcon> = {
   overdue: AlertTriangle,
   disabled: Ban,
   damaged: AlertTriangle,
+  returned: Undo2,
 };
 
 export const OWNERSHIP_ICON: Record<ToolOwnership, LucideIcon> = {
@@ -97,6 +99,7 @@ export const MOVEMENT_ICON: Record<MovementType, LucideIcon> = {
   markedDamaged: AlertTriangle,
   unmarkedDamaged: CheckCircle2,
   workshopAssigned: WorkshopIcon,
+  rentalReturned: Undo2,
 };
 
 // MARK: - Building blocks

@@ -1,11 +1,11 @@
 /** Shared domain types for ToolsLoc — now backed by Supabase. */
 
 export type ToolOwnership = "own" | "rented" | "client";
-export type ToolStatus = "available" | "inUse" | "maintenance" | "overdue" | "disabled" | "damaged";
+export type ToolStatus = "available" | "inUse" | "maintenance" | "overdue" | "disabled" | "damaged" | "returned";
 export type RentalPeriod = "daily" | "weekly" | "monthly";
 export type SiteStatus = "active" | "paused" | "completed";
 export type AttachmentType = "photo" | "video";
-export type AttachmentPurpose = "general" | "serialNumber" | "delivery" | "receipt" | "condition" | "invoice";
+export type AttachmentPurpose = "general" | "serialNumber" | "delivery" | "receipt" | "condition" | "invoice" | "rentalReturn";
 export type StatusColor = "green" | "blue" | "red" | "orange" | "gray";
 export type AuditFrequency = "weekly" | "biweekly" | "monthly";
 export type AuditStatus = "confirmed" | "damaged";
@@ -42,7 +42,8 @@ export type MovementType =
   | "maintenanceReturned"
   | "markedDamaged"
   | "unmarkedDamaged"
-  | "workshopAssigned";
+  | "workshopAssigned"
+  | "rentalReturned";
 
 export const OWNERSHIP_LABEL: Record<ToolOwnership, string> = {
   own: "Própria",
@@ -57,6 +58,7 @@ export const TOOL_STATUS_LABEL: Record<ToolStatus, string> = {
   overdue: "Atrasada",
   disabled: "Desativada",
   damaged: "Avariada",
+  returned: "Devolvida",
 };
 
 export const TOOL_STATUS_COLOR: Record<ToolStatus, StatusColor> = {
@@ -66,6 +68,7 @@ export const TOOL_STATUS_COLOR: Record<ToolStatus, StatusColor> = {
   overdue: "red",
   disabled: "gray",
   damaged: "orange",
+  returned: "gray",
 };
 
 export const RENTAL_PERIOD_LABEL: Record<RentalPeriod, string> = {
@@ -113,6 +116,7 @@ export const MOVEMENT_LABEL: Record<MovementType, string> = {
   markedDamaged: "Marcada como Avariada",
   unmarkedDamaged: "Avaria Removida",
   workshopAssigned: "Oficina Atribuída",
+  rentalReturned: "Devolução de Locação Registrada",
 };
 
 export const MOVEMENT_COLOR: Record<MovementType, StatusColor> = {
@@ -135,6 +139,7 @@ export const MOVEMENT_COLOR: Record<MovementType, StatusColor> = {
   markedDamaged: "orange",
   unmarkedDamaged: "green",
   workshopAssigned: "orange",
+  rentalReturned: "gray",
 };
 
 export const ATTACHMENT_PURPOSE_LABEL: Record<AttachmentPurpose, string> = {
@@ -144,6 +149,7 @@ export const ATTACHMENT_PURPOSE_LABEL: Record<AttachmentPurpose, string> = {
   receipt: "Recebimento",
   condition: "Estado/Condição",
   invoice: "Nota Fiscal/Orçamento",
+  rentalReturn: "Devolução de Locação",
 };
 
 export const AUDIT_FREQUENCY_LABEL: Record<AuditFrequency, string> = {
@@ -329,6 +335,27 @@ export interface MaintenanceRecord {
   status: MaintenanceStatus;
 }
 
+/** Record of a rented tool being returned to the rental company. */
+export interface RentalReturn {
+  id: string;
+  toolId: string;
+  movementId: string | null;
+  returnDate: string;
+  /** "confirmed" (good condition) | "damaged" — reuses the audit status type. */
+  conditionStatus: AuditStatus;
+  /** Description of the condition/damage, if any. */
+  conditionNotes: string;
+  /** Free text: "2 baterias, 1 carregador, 1 maleta". */
+  accessoriesReturned: string;
+  /** Rental company employee who received/collected the tool. */
+  recipientName: string;
+  recipientPhone: string;
+  photoAttachmentId: string | null;
+  /** Who on our team registered the return. */
+  userId: string | null;
+  userName: string;
+}
+
 export interface ActivityLog {
   id: string;
   userId: string | null;
@@ -379,6 +406,7 @@ export interface DB {
   attachments: ToolAttachment[];
   audits: AuditRecord[];
   maintenance: MaintenanceRecord[];
+  rentalReturns: RentalReturn[];
   activityLogs: ActivityLog[];
   users: UserProfile[];
   movementTypes: MovementTypeEntity[];
@@ -397,6 +425,7 @@ export function isRentalTracked(tool: Tool): boolean {
 
 export function effectiveStatus(tool: Tool): ToolStatus {
   if (tool.baseStatus === "disabled") return "disabled";
+  if (tool.baseStatus === "returned") return "returned";
   if (tool.baseStatus === "damaged") return "damaged";
   if (isRentalTracked(tool) && tool.rentalEndDate && new Date(tool.rentalEndDate).getTime() < Date.now()) {
     return "overdue";
@@ -428,16 +457,16 @@ export function isRentalEndingSoon(tool: Tool): boolean {
   return days !== null && days >= 0 && days <= 3;
 }
 
-/** Whether the audit due date has passed (disabled tools are never due). */
+/** Whether the audit due date has passed (disabled/returned tools are never due). */
 export function isAuditDue(tool: Tool): boolean {
-  if (tool.baseStatus === "disabled" || tool.baseStatus === "damaged" || tool.baseStatus === "maintenance") return false;
+  if (tool.baseStatus === "disabled" || tool.baseStatus === "returned" || tool.baseStatus === "damaged" || tool.baseStatus === "maintenance") return false;
   if (!tool.nextAuditDate) return false;
   return new Date(tool.nextAuditDate).getTime() < Date.now();
 }
 
-/** Days until the next audit (negative = overdue). Returns null for disabled tools. */
+/** Days until the next audit (negative = overdue). Returns null for disabled/returned tools. */
 export function auditDaysRemaining(tool: Tool): number | null {
-  if (tool.baseStatus === "disabled" || tool.baseStatus === "damaged" || tool.baseStatus === "maintenance") return null;
+  if (tool.baseStatus === "disabled" || tool.baseStatus === "returned" || tool.baseStatus === "damaged" || tool.baseStatus === "maintenance") return null;
   if (!tool.nextAuditDate) return null;
   const diff = new Date(tool.nextAuditDate).getTime() - Date.now();
   return diff >= 0 ? Math.floor(diff / DAY_MS) : -Math.ceil(-diff / DAY_MS);
@@ -453,6 +482,7 @@ export function computeNextAuditDate(frequency: AuditFrequency, from: Date = new
 /** Get audit status label for a tool. */
 export function auditStatusLabel(tool: Tool): string {
   if (tool.baseStatus === "disabled") return "Desativada";
+  if (tool.baseStatus === "returned") return "Devolvida";
   if (tool.baseStatus === "maintenance") return "Em Manutenção";
   if (tool.baseStatus === "damaged") return "Avariada";
   const days = auditDaysRemaining(tool);
@@ -464,6 +494,7 @@ export function auditStatusLabel(tool: Tool): string {
 
 export function auditStatusColor(tool: Tool): StatusColor {
   if (tool.baseStatus === "disabled") return "gray";
+  if (tool.baseStatus === "returned") return "gray";
   if (tool.baseStatus === "maintenance") return "gray";
   if (tool.baseStatus === "damaged") return "orange";
   const days = auditDaysRemaining(tool);
@@ -485,6 +516,7 @@ export const PERMISSION_NAMES = {
   AUDIT: "Auditoria/conferência",
   SEND_MAINTENANCE: "Envio para manutenção",
   RETURN_MAINTENANCE: "Retorno de manutenção",
+  RETURN_RENTAL: "Devolução de locação",
 } as const;
 
 /** Default system movement types seeded on first load. */
@@ -493,4 +525,5 @@ export const DEFAULT_MOVEMENT_TYPES = [
   { name: PERMISSION_NAMES.AUDIT, description: "Realizar auditorias e registrar avarias", sortOrder: 2 },
   { name: PERMISSION_NAMES.SEND_MAINTENANCE, description: "Enviar ferramentas para manutenção", sortOrder: 3 },
   { name: PERMISSION_NAMES.RETURN_MAINTENANCE, description: "Registrar retorno de manutenção com nota fiscal", sortOrder: 4 },
+  { name: PERMISSION_NAMES.RETURN_RENTAL, description: "Registrar devolução de ferramentas locadas", sortOrder: 5 },
 ];

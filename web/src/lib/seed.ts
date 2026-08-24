@@ -145,6 +145,7 @@ export function buildSeedData(): DB {
     attachments: [],
     audits: [],
     maintenance: [],
+    rentalReturns: [],
     activityLogs: [],
     users: [joao, pedro, maria, jose, lucas],
     movementTypes: [],

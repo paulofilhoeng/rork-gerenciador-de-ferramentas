@@ -193,6 +193,7 @@ export function ToolEditDialog({ tool, open, onClose }: Props) {
                 <option value="maintenance">Em Manutenção</option>
                 <option value="overdue">Atrasada</option>
                 <option value="damaged">Avariada</option>
+                <option value="returned">Devolvida</option>
                 <option value="disabled">Desativada</option>
               </select>
             </Field>

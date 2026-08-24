@@ -342,6 +342,80 @@ export type Database = {
         }
         Relationships: []
       }
+      rental_returns: {
+        Row: {
+          accessories_returned: string | null
+          condition_notes: string | null
+          condition_status: string
+          id: string
+          movement_id: string | null
+          photo_attachment_id: string | null
+          recipient_name: string
+          recipient_phone: string | null
+          return_date: string | null
+          tool_id: string
+          user_id: string | null
+          user_name: string | null
+        }
+        Insert: {
+          accessories_returned?: string | null
+          condition_notes?: string | null
+          condition_status: string
+          id?: string
+          movement_id?: string | null
+          photo_attachment_id?: string | null
+          recipient_name: string
+          recipient_phone?: string | null
+          return_date?: string | null
+          tool_id: string
+          user_id?: string | null
+          user_name?: string | null
+        }
+        Update: {
+          accessories_returned?: string | null
+          condition_notes?: string | null
+          condition_status?: string
+          id?: string
+          movement_id?: string | null
+          photo_attachment_id?: string | null
+          recipient_name?: string
+          recipient_phone?: string | null
+          return_date?: string | null
+          tool_id?: string
+          user_id?: string | null
+          user_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rental_returns_movement_id_fkey"
+            columns: ["movement_id"]
+            isOneToOne: false
+            referencedRelation: "tool_movements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rental_returns_photo_attachment_id_fkey"
+            columns: ["photo_attachment_id"]
+            isOneToOne: false
+            referencedRelation: "tool_attachments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rental_returns_tool_id_fkey"
+            columns: ["tool_id"]
+            isOneToOne: false
+            referencedRelation: "tools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rental_returns_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       site_user_permissions: {
         Row: {
           allowed: boolean

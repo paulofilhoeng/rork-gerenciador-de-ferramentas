@@ -15,6 +15,7 @@ import type {
   MaintenanceRecord,
   MovementTypeEntity,
   RentalCompany,
+  RentalReturn,
   SiteUserPermission,
   Tool,
   ToolAttachment,
@@ -138,6 +139,23 @@ function mapMaintenance(row: Record<string, unknown>): MaintenanceRecord {
   };
 }
 
+function mapRentalReturn(row: Record<string, unknown>): RentalReturn {
+  return {
+    id: row.id as string,
+    toolId: row.tool_id as string,
+    movementId: (row.movement_id as string) ?? null,
+    returnDate: (row.return_date as string) ?? new Date().toISOString(),
+    conditionStatus: row.condition_status as RentalReturn["conditionStatus"],
+    conditionNotes: (row.condition_notes as string) ?? "",
+    accessoriesReturned: (row.accessories_returned as string) ?? "",
+    recipientName: (row.recipient_name as string) ?? "",
+    recipientPhone: (row.recipient_phone as string) ?? "",
+    photoAttachmentId: (row.photo_attachment_id as string) ?? null,
+    userId: (row.user_id as string) ?? null,
+    userName: (row.user_name as string) ?? "",
+  };
+}
+
 function mapActivityLog(row: Record<string, unknown>): ActivityLog {
   return {
     id: row.id as string,
@@ -228,6 +246,7 @@ const EMPTY_DB: DB = {
   attachments: [],
   audits: [],
   maintenance: [],
+  rentalReturns: [],
   activityLogs: [],
   users: [],
   movementTypes: [],
@@ -257,6 +276,7 @@ interface DataContextValue {
   reportDamage: (toolId: string, description: string) => Promise<void>;
   startMaintenance: (toolId: string) => Promise<void>;
   returnFromMaintenance: (toolId: string, repairCost: number, invoiceNumber: string, invoiceAttachment: ToolAttachment | null) => Promise<void>;
+  registerRentalReturn: (toolId: string, conditionStatus: AuditStatus, conditionNotes: string, accessoriesReturned: string, recipientName: string, recipientPhone: string, photoAttachment: ToolAttachment) => Promise<void>;
   markDamaged: (toolId: string, damageObs: string, lastUser: string) => Promise<void>;
   unmarkDamaged: (toolId: string) => Promise<void>;
   assignToWorkshop: (toolId: string, workshopId: string) => Promise<void>;
@@ -296,6 +316,7 @@ function useDataHook() {
           attachmentsRes,
           auditsRes,
           maintenanceRes,
+          rentalReturnsRes,
           activityRes,
           profilesRes,
           settingsRes,
@@ -310,6 +331,7 @@ function useDataHook() {
           supabase.from("tool_attachments").select("*"),
           supabase.from("audit_records").select("*"),
           supabase.from("maintenance_records").select("*"),
+          supabase.from("rental_returns").select("*"),
           supabase.from("activity_logs").select("*").order("created_at", { ascending: false }).limit(500),
           supabase.from("profiles").select("*"),
           supabase.from("app_settings").select("*").eq("id", 1).maybeSingle(),
@@ -319,11 +341,15 @@ function useDataHook() {
 
         if (cancelled) return;
 
-        // Seed default system movement types if none exist (first-time setup).
+        // Seed missing default system movement types (first-time setup or newly added defaults).
+        const existingTypeNames = new Set(
+          (movementTypesRes.data ?? []).map((r) => (r as Record<string, unknown>).name as string),
+        );
+        const missingTypes = DEFAULT_MOVEMENT_TYPES.filter((d) => !existingTypeNames.has(d.name));
         let movementTypesRows = movementTypesRes.data ?? [];
-        if (movementTypesRows.length === 0) {
+        if (missingTypes.length > 0) {
           await supabase.from("movement_types").insert(
-            DEFAULT_MOVEMENT_TYPES.map((d) => ({
+            missingTypes.map((d) => ({
               name: d.name,
               description: d.description,
               is_active: true,
@@ -353,6 +379,7 @@ function useDataHook() {
           attachments: (attachmentsRes.data ?? []).map((r) => mapAttachment(r as Record<string, unknown>)),
           audits: (auditsRes.data ?? []).map((r) => mapAudit(r as Record<string, unknown>)),
           maintenance: (maintenanceRes.data ?? []).map((r) => mapMaintenance(r as Record<string, unknown>)),
+          rentalReturns: (rentalReturnsRes.data ?? []).map((r) => mapRentalReturn(r as Record<string, unknown>)),
           activityLogs: (activityRes.data ?? []).map((r) => mapActivityLog(r as Record<string, unknown>)),
           users: (profilesRes.data ?? []).map((r) => mapProfile(r as Record<string, unknown>)),
           movementTypes: movementTypesRows.map((r) => mapMovementType(r as Record<string, unknown>)),
@@ -435,6 +462,13 @@ function useDataHook() {
           const exists = prev.maintenance.some((m) => m.id === newRow.id);
           return { ...prev, maintenance: exists ? prev.maintenance.map((m) => (m.id === newRow.id ? newRow : m)) : [...prev.maintenance, newRow] };
         });
+      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "rental_returns" }, (payload) => {
+        const newRow = mapRentalReturn(payload.new as Record<string, unknown>);
+        setDB((prev) => ({
+          ...prev,
+          rentalReturns: prev.rentalReturns.some((r) => r.id === newRow.id) ? prev.rentalReturns : [...prev.rentalReturns, newRow],
+        }));
       })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "activity_logs" }, (payload) => {
         const newRow = mapActivityLog(payload.new as Record<string, unknown>);
@@ -1183,6 +1217,115 @@ function useDataHook() {
     [db.tools, db.maintenance, user, profile, insertMovements, logActivity],
   );
 
+  const registerRentalReturn = useCallback(
+    async (
+      toolId: string,
+      conditionStatus: AuditStatus,
+      conditionNotes: string,
+      accessoriesReturned: string,
+      recipientName: string,
+      recipientPhone: string,
+      photoAttachment: ToolAttachment,
+    ) => {
+      const tool = db.tools.find((t) => t.id === toolId);
+      if (!tool) return;
+      const nowIso = new Date().toISOString();
+      const movementId = newId();
+      const returnId = newId();
+      const conditionLabel = conditionStatus === "confirmed" ? "Boas condições" : "Avariada";
+
+      const newMovement: ToolMovement = {
+        id: movementId,
+        toolId,
+        type: "rentalReturned",
+        description: `Devolução registrada — recebido por ${recipientName}, estado: ${conditionLabel}`,
+        oldValue: "Locação",
+        newValue: "Devolvida",
+        timestamp: nowIso,
+        attachmentIds: [photoAttachment.id],
+        userId: user?.id ?? null,
+        userName: profile?.name ?? "",
+      };
+      const newReturn: RentalReturn = {
+        id: returnId,
+        toolId,
+        movementId,
+        returnDate: nowIso,
+        conditionStatus,
+        conditionNotes,
+        accessoriesReturned,
+        recipientName,
+        recipientPhone,
+        photoAttachmentId: photoAttachment.id,
+        userId: user?.id ?? null,
+        userName: profile?.name ?? "",
+      };
+
+      // Optimistic — deliberately keeps currentSiteId/currentUserId untouched
+      // (site/user allocation changes remain admin-only, transversal rule).
+      setDB((prev) => ({
+        ...prev,
+        movements: [...prev.movements, newMovement],
+        rentalReturns: [...prev.rentalReturns, newReturn],
+        attachments: [...prev.attachments, photoAttachment],
+        tools: prev.tools.map((t) => (t.id === toolId ? { ...t, baseStatus: "returned", statusUpdatedAt: nowIso } : t)),
+      }));
+
+      // Index 2 is insertMovements (void) — skip it via a hole.
+      const [toolRes, returnRes, , attachRes] = await Promise.all([
+        supabase.from("tools").update({ base_status: "returned", status_updated_at: nowIso }).eq("id", toolId),
+        supabase.from("rental_returns").insert({
+          id: returnId,
+          tool_id: toolId,
+          movement_id: movementId,
+          return_date: nowIso,
+          condition_status: conditionStatus,
+          condition_notes: conditionNotes,
+          accessories_returned: accessoriesReturned,
+          recipient_name: recipientName,
+          recipient_phone: recipientPhone,
+          photo_attachment_id: photoAttachment.id,
+          user_id: user?.id ?? null,
+          user_name: profile?.name ?? "",
+        }),
+        insertMovements([newMovement]),
+        supabase.from("tool_attachments").insert({
+          id: photoAttachment.id,
+          tool_id: photoAttachment.toolId,
+          movement_id: null,
+          type: photoAttachment.type,
+          purpose: photoAttachment.purpose,
+          data_url: photoAttachment.dataUrl,
+          caption: photoAttachment.caption,
+        }),
+        logActivity(
+          "edit",
+          "tool",
+          toolId,
+          tool.name,
+          { status: tool.baseStatus },
+          { status: "returned", recipientName, conditionStatus },
+          tool.currentSiteId,
+        ),
+      ]);
+
+      const failed = toolRes.error ?? returnRes.error ?? attachRes.error;
+      if (failed) {
+        // Rollback — the server rejected one of the writes.
+        setDB((prev) => ({
+          ...prev,
+          tools: prev.tools.map((t) => (t.id === toolId ? tool : t)),
+          movements: prev.movements.filter((m) => m.id !== movementId),
+          rentalReturns: prev.rentalReturns.filter((r) => r.id !== returnId),
+          attachments: prev.attachments.filter((a) => a.id !== photoAttachment.id),
+        }));
+        toast.error("Falha ao registrar devolução");
+        console.error(failed);
+      }
+    },
+    [db.tools, user, profile, insertMovements, logActivity],
+  );
+
   const saveUser = useCallback(
     async (updatedUser: UserProfile, previousRole?: UserRole) => {
       const isNew = !db.users.some((u) => u.id === updatedUser.id);
@@ -1600,6 +1743,7 @@ function useDataHook() {
     reportDamage,
     startMaintenance,
     returnFromMaintenance,
+    registerRentalReturn,
     markDamaged,
     unmarkDamaged,
     assignToWorkshop,
