@@ -117,7 +117,7 @@ const HELP_ITEMS: HelpItem[] = [
     title: "Registro Fotográfico (Recebimento e Entrega)",
     icon: Image,
     content:
-      "Ao receber ou entregar uma ferramenta, é possível (e em alguns casos obrigatório) anexar fotos: mínimo de 3 fotos, incluindo 1 foto do número de registro da ferramenta. Toque em “Registrar Recebimento” ou “Registrar Entrega” na tela de detalhe.",
+      "Ao receber ou devolver uma ferramenta, é possível (e em alguns casos obrigatório) anexar fotos: mínimo de 3 fotos, incluindo 1 foto do número de registro da ferramenta. Toque em “Registrar Recebimento” ou “Registrar Devolução” na tela de detalhe.",
     images: [
       "https://r2-pub.rork.com/attachments/nejs3btr7xr3hfpasgz64.png",
       "https://r2-pub.rork.com/attachments/py0f0cbmcnvg5j9tjovgv.png",

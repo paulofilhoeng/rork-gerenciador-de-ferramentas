@@ -522,7 +522,7 @@ export default function ToolDetail() {
           <button type="button" onClick={() => setValidationOp("delivery")} className="flex items-center gap-3 rounded-[10px] bg-app-elevated p-3 text-left hover:bg-app-elevated/70">
             <ArrowUpCircle size={18} className="shrink-0 text-app-orange" />
             <div className="flex-1">
-              <p className="text-[15px] font-semibold text-white">Registrar Entrega</p>
+              <p className="text-[15px] font-semibold text-white">Registrar Devolução</p>
               <p className="text-xs text-app-muted">3 fotos obrigatórias (incluindo registro)</p>
             </div>
           </button>
