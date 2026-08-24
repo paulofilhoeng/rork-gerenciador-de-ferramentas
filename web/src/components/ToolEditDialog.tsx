@@ -120,7 +120,7 @@ export function ToolEditDialog({ tool, open, onClose }: Props) {
 
       const oldSite = siteName(tool.currentSiteId);
       const newSite = siteName(target.currentSiteId);
-      if (newSite !== oldSite) {
+      if (target.ownership === "own" && newSite !== oldSite) {
         if (oldSite && newSite) record("siteChanged", "Obra alterada", oldSite, newSite);
         else if (newSite) record("siteAssigned", "Atribuída à obra", "", newSite);
         else if (oldSite) record("siteRemoved", "Removida da obra", oldSite, "");
