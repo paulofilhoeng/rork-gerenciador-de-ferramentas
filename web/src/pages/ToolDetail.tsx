@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowDownCircle, ArrowLeft, ArrowUpCircle, AlertTriangle, Building2, CheckCircle2, ClipboardCheck, Clock, Download, Hammer, Power, Trash2, Undo2, User, Wrench } from "lucide-react";
+import { ArrowDownCircle, ArrowLeft, ArrowUpCircle, AlertTriangle, Building2, CheckCircle2, ClipboardCheck, Clock, Download, Hammer, Power, Printer, Trash2, Undo2, User, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -42,10 +42,11 @@ import { MaintenanceReturnDialog } from "@/components/MaintenanceReturnDialog";
 import { RentalReturnDialog } from "@/components/RentalReturnDialog";
 import { useData } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
-import type { ToolAttachment } from "@/lib/types";
+import type { RentalReturn, ToolAttachment } from "@/lib/types";
 import { AUDIT_FREQUENCY_LABEL, MOVEMENT_COLOR, MOVEMENT_LABEL, OWNERSHIP_LABEL, PERMISSION_NAMES, RENTAL_PERIOD_LABEL, TOOL_STATUS_COLOR, TOOL_STATUS_LABEL, auditStatusLabel, auditStatusColor, auditDaysRemaining, daysRemaining, effectiveStatus, isRentalTracked, newId, totalRentalCost, dailyCostFromPeriod, } from "@/lib/types";
 import { formatCurrency, formatDateTime, formatShortDate } from "@/lib/format";
 import { generateMovementsReport } from "@/lib/reports";
+import { printRentalReturnReceipt } from "@/lib/receipt";
 import { cn } from "@/lib/utils";
 
 export default function ToolDetail() {
@@ -86,6 +87,16 @@ export default function ToolDetail() {
     () => db.rentalReturns.filter((r) => r.toolId === id).sort((a, b) => b.returnDate.localeCompare(a.returnDate)),
     [db.rentalReturns, id],
   );
+
+  const handlePrintReceipt = (r: RentalReturn) => {
+    printRentalReturnReceipt({
+      tool,
+      rentalReturn: r,
+      companyName: db.companies.find((c) => c.id === tool.rentalCompanyId)?.name ?? "—",
+      siteName: db.sites.find((s) => s.id === tool.currentSiteId)?.name ?? "—",
+      photoDataUrl: db.attachments.find((a) => a.id === r.photoAttachmentId)?.dataUrl ?? null,
+    });
+  };
 
   if (!tool) {
     return (
@@ -456,6 +467,14 @@ export default function ToolDetail() {
                     <p className="text-xs text-app-muted">Recebido por {r.recipientName}{r.recipientPhone ? ` · ${r.recipientPhone}` : ""}</p>
                     <p className="text-[11px] text-app-muted/60">{r.userName} · {formatDateTime(r.returnDate)}</p>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => handlePrintReceipt(r)}
+                    title="Imprimir comprovante de devolução"
+                    className="mt-0.5 flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-app-elevated px-2.5 py-1.5 text-[11px] font-semibold text-app-muted transition-colors hover:bg-app-accent/15 hover:text-app-accent"
+                  >
+                    <Printer size={12} /> Imprimir Comprovante
+                  </button>
                 </div>
                 {i < rentalReturns.length - 1 && <Separator />}
               </div>
