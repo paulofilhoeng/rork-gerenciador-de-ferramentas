@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowDownCircle, ArrowLeft, ArrowUpCircle, AlertTriangle, Building2, CheckCircle2, ClipboardCheck, Clock, Download, Hammer, Power, Printer, Trash2, Undo2, User, Wrench } from "lucide-react";
 import { toast } from "sonner";
@@ -52,7 +52,7 @@ import { cn } from "@/lib/utils";
 export default function ToolDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { db, deleteTool, saveTool, addMovements, addAttachments, removeAttachment, startMaintenance, markDamaged, unmarkDamaged, assignToWorkshop, hasPermission } = useData();
+  const { db, deleteTool, saveTool, addMovements, addAttachments, removeAttachment, startMaintenance, markDamaged, unmarkDamaged, assignToWorkshop, hasPermission, fetchToolAttachments } = useData();
   const { isAdmin, profile } = useAuth();
 
   const [showEdit, setShowEdit] = useState(false);
@@ -87,6 +87,12 @@ export default function ToolDetail() {
     () => db.rentalReturns.filter((r) => r.toolId === id).sort((a, b) => b.returnDate.localeCompare(a.returnDate)),
     [db.rentalReturns, id],
   );
+
+  // The initial load only fetches attachment metadata, so pull the actual image
+  // data for this tool when its detail page opens.
+  useEffect(() => {
+    if (id) void fetchToolAttachments(id);
+  }, [id, fetchToolAttachments]);
 
   const handlePrintReceipt = (r: RentalReturn) => {
     printRentalReturnReceipt({

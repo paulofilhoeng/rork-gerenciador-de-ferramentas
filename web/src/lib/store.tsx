@@ -105,7 +105,9 @@ function mapAttachment(row: Record<string, unknown>): ToolAttachment {
     movementId: (row.movement_id as string) ?? null,
     type: row.type as ToolAttachment["type"],
     purpose: row.purpose as ToolAttachment["purpose"],
-    dataUrl: row.data_url as string,
+    // The initial bulk load omits data_url (too heavy). It is hydrated on demand
+    // per tool via fetchToolAttachments.
+    dataUrl: (row.data_url as string) ?? "",
     caption: (row.caption as string) ?? "",
     createdAt: (row.created_at as string) ?? new Date().toISOString(),
   };
@@ -272,6 +274,7 @@ interface DataContextValue {
   addMovements: (movements: ToolMovement[]) => Promise<void>;
   addAttachments: (attachments: ToolAttachment[]) => Promise<void>;
   removeAttachment: (id: string) => Promise<void>;
+  fetchToolAttachments: (toolId: string) => Promise<void>;
   confirmAudit: (toolId: string) => Promise<void>;
   reportDamage: (toolId: string, description: string) => Promise<void>;
   startMaintenance: (toolId: string) => Promise<void>;
@@ -328,7 +331,7 @@ function useDataHook() {
           supabase.from("workshops").select("*"),
           supabase.from("construction_sites").select("*"),
           supabase.from("tool_movements").select("*"),
-          supabase.from("tool_attachments").select("*"),
+          supabase.from("tool_attachments").select("id, tool_id, movement_id, type, purpose, caption, created_at"),
           supabase.from("audit_records").select("*"),
           supabase.from("maintenance_records").select("*"),
           supabase.from("rental_returns").select("*"),
@@ -822,6 +825,20 @@ function useDataHook() {
       toast.error("Falha ao salvar anexo");
       console.error(error);
     }
+  }, []);
+
+  /** Loads the full attachment rows (including the heavy data_url) for a single tool. */
+  const fetchToolAttachments = useCallback(async (toolId: string) => {
+    const { data, error } = await supabase.from("tool_attachments").select("*").eq("tool_id", toolId);
+    if (error) {
+      console.error(error);
+      return;
+    }
+    const hydrated = (data ?? []).map((r) => mapAttachment(r as Record<string, unknown>));
+    setDB((prev) => ({
+      ...prev,
+      attachments: [...prev.attachments.filter((a) => a.toolId !== toolId), ...hydrated],
+    }));
   }, []);
 
   const removeAttachment = useCallback(async (id: string) => {
@@ -1756,6 +1773,7 @@ function useDataHook() {
     addMovements,
     addAttachments,
     removeAttachment,
+    fetchToolAttachments,
     confirmAudit,
     reportDamage,
     startMaintenance,
