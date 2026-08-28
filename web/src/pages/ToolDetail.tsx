@@ -121,7 +121,7 @@ export default function ToolDetail() {
   const hasActiveMaintenance = maintenanceRecords.some((m) => m.status === "active");
   const workshop = tool.workshopId ? db.workshops.find((w) => w.id === tool.workshopId) : null;
 
-  const handleValidationConfirm = (newAttachments: ToolAttachment[]) => {
+  const handleValidationConfirm = async (newAttachments: ToolAttachment[]) => {
     if (!validationOp) return;
     // Standard users need "Edição de ferramenta" permission to register receipt/delivery on this site.
     if (!isAdmin && profile && !hasPermission(profile.id, tool.currentSiteId, PERMISSION_NAMES.EDIT)) {
@@ -131,15 +131,17 @@ export default function ToolDetail() {
     }
     const movementId = newId();
     const withMovement = newAttachments.map((a) => ({ ...a, movementId }));
+    const op = validationOp;
     setValidationOp(null);
-    toast.success(`${OPERATION_LABEL[validationOp]} registrado com ${withMovement.length} fotos`);
-    void addAttachments(withMovement);
-    void addMovements([
+
+    // A movimentação precisa existir no banco ANTES das fotos, pois
+    // tool_attachments.movement_id tem foreign key para tool_movements.id.
+    await addMovements([
       {
         id: movementId,
         toolId: tool.id,
-        type: validationOp === "receipt" ? "rentalStarted" : "rentalEnded",
-        description: `${OPERATION_LABEL[validationOp]} registrado com fotos`,
+        type: op === "receipt" ? "rentalStarted" : "rentalEnded",
+        description: `${OPERATION_LABEL[op]} registrado com fotos`,
         oldValue: "",
         newValue: "",
         timestamp: new Date().toISOString(),
@@ -148,6 +150,8 @@ export default function ToolDetail() {
         userName: "",
       },
     ]);
+    await addAttachments(withMovement);
+    toast.success(`${OPERATION_LABEL[op]} registrado com ${withMovement.length} fotos`);
   };
 
   const handleStartMaintenance = () => {
